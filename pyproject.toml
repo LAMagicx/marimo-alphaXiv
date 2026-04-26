@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "altair>=6.0.0",
-    "anywidget>=0.10.0",
-    "marimo>=0.23.1",
+    "anywidget>=0.9.18",
+    "marimo[lsp,recommended]==0.23.0",
     "matplotlib>=3.10.8",
     "numpy>=2.4.4",
     "pandas>=3.0.2",

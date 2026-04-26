@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.1"
+__generated_with = "0.23.0"
 app = marimo.App(width="medium", sql_output="polars")
 
 
@@ -514,8 +514,8 @@ def sample_input_generation(CHARS, PREDICT_DIGITS, mo):
 
     scratch_input_slider = mo.ui.slider(
         label="Choose a number: ",
-        start=int("".join([str(_x) for _x in "1" * PREDICT_DIGITS])),
-        stop=int("".join([str(_x) for _x in "9" * PREDICT_DIGITS])),
+        start=0,
+        stop=int("9" * PREDICT_DIGITS),
         value=int(sample_input),
         show_value=True,
     )
@@ -630,8 +630,8 @@ def scratch_results_md(mo):
 def scratch_test_slider(PREDICT_DIGITS, mo, sample_input):
     trained_scratch_input_slider = mo.ui.slider(
         label="Test the trained model: ",
-        start=int("".join([str(_x) for _x in "1" * PREDICT_DIGITS])),
-        stop=int("".join([str(_x) for _x in "9" * PREDICT_DIGITS])),
+        start=0,
+        stop=int("9" * PREDICT_DIGITS),
         value=int(sample_input),
         show_value=True,
     )
@@ -1375,12 +1375,12 @@ def nca_step_widget(
             if (model.get("playing")) {
               const grids = model.get("grids");
               if (!grids || grids.length < 2) return;
-          
+
               let tidx = model.get("t_idx");
               let cidx = model.get("cell_idx");
               const w = model.get("w");
               const h = model.get("h");
-          
+
               cidx++;
               if (cidx >= h * w) {
                 cidx = 0;
@@ -1392,7 +1392,7 @@ def nca_step_widget(
                   model.save_changes();
                 }, 500);
               }
-          
+
               model.set("t_idx", tidx);
               model.set("cell_idx", cidx);
               model.save_changes();
@@ -1403,37 +1403,37 @@ def nca_step_widget(
         render({ model, el }) {
            const root = document.createElement("div");
            root.style.cssText = "font-family:sans-serif;user-select:none; max-width: 700px;";
-       
+
            const topCard = document.createElement("div");
            topCard.style.cssText = "background: #fff; margin-bottom: 20px;";
            const topContent = document.createElement("div");
            topContent.style.cssText = "display: flex; gap: 32px; align-items: flex-start;";
-       
+
            const CELL = 22;
            const W = model.get("w");
            const H = model.get("h");
-       
+
            const cv = document.createElement("canvas");
            cv.width = W * CELL;
            cv.height = H * CELL;
            cv.style.cssText = "display:block;flex-shrink:0;";
            const ctx = cv.getContext("2d");
-       
+
            const COLORS = [
              "#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f",
              "#edc948","#b07aa1","#ff9da7","#9c755f",
            ];
-       
+
            function draw() {
               const grids = model.get("grids");
               if (!grids) return;
               const tidx = model.get("t_idx");
               const cidx = model.get("cell_idx");
               const cur = grids[tidx];
-          
+
               const hlR = Math.floor(cidx / W);
               const hlC = cidx % W;
-          
+
               ctx.clearRect(0, 0, cv.width, cv.height);
               for (let r = 0; r < H; r++) {
                 for (let c = 0; c < W; c++) {
@@ -1441,7 +1441,7 @@ def nca_step_widget(
                   ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
                 }
               }
-          
+
               const x0 = Math.max(0, hlC - 1) * CELL;
               const y0 = Math.max(0, hlR - 1) * CELL;
               const x1 = Math.min(W, hlC + 2) * CELL;
@@ -1453,22 +1453,22 @@ def nca_step_widget(
               ctx.fillRect(hlC * CELL, hlR * CELL, CELL, CELL);
               ctx.lineWidth = 1;
            }
-       
+
            const ctrl = document.createElement("div");
            ctrl.style.cssText = "display:flex; flex-direction: column; gap: 16px; padding: 16px; background: #f9f9f9; border-radius: 8px; min-width: 200px;";
-       
+
            const btnRow = document.createElement("div");
            btnRow.style.cssText = "display:flex; gap: 8px;";
-       
+
            const playBtn = document.createElement("button");
            playBtn.style.cssText = "flex: 1; padding:6px 12px; border:1px solid #ccc; border-radius:4px; cursor:pointer; background:#fff; font-weight: 500;";
-       
+
            const stepBtn = document.createElement("button");
            stepBtn.textContent = "Step ▶";
            stepBtn.style.cssText = "flex: 1; padding:6px 12px; border:1px solid #ccc; border-radius:4px; cursor:pointer; background:#fff; font-weight: 500;";
-       
+
            btnRow.append(playBtn, stepBtn);
-       
+
            const spdWrap = document.createElement("div");
            spdWrap.style.cssText = "display:flex; flex-direction: column; gap: 4px;";
            const spdLbl = document.createElement("span");
@@ -1477,18 +1477,18 @@ def nca_step_widget(
            const spdSlider = document.createElement("input");
            spdSlider.type="range"; spdSlider.min=15; spdSlider.max=250; 
            spdSlider.value = 265 - model.get("speed");
-       
+
            spdWrap.append(spdLbl, spdSlider);
-       
+
            const infoBar = document.createElement("div");
            infoBar.style.cssText = "font-size:12px;color:#888;font-family:monospace; margin-top: auto;";
-       
+
            ctrl.append(btnRow, spdWrap, infoBar);
            topContent.append(cv, ctrl);
            topCard.appendChild(topContent);
            root.appendChild(topCard);
            el.appendChild(root);
-       
+
            function updateUI() {
               draw();
               playBtn.textContent = model.get("playing") ? "⏸ Pause" : "▶ Play";
@@ -1496,12 +1496,12 @@ def nca_step_widget(
               const c = model.get("cell_idx") % W;
               infoBar.textContent = `Time t=${model.get("t_idx")} | Updating cell (${r}, ${c})`;
            }
-       
+
            playBtn.addEventListener("click", () => {
              model.set("playing", !model.get("playing"));
              model.save_changes();
            });
-       
+
            stepBtn.addEventListener("click", () => {
              model.set("playing", false);
              let cidx = model.get("cell_idx") + 1;
@@ -1511,16 +1511,16 @@ def nca_step_widget(
              model.set("t_idx", tidx);
              model.save_changes();
            });
-       
+
            spdSlider.addEventListener("input", () => {
              model.set("speed", 265 - parseInt(spdSlider.value));
              model.save_changes();
            });
-       
+
            model.on("change:t_idx", updateUI);
            model.on("change:cell_idx", updateUI);
            model.on("change:playing", updateUI);
-       
+
            updateUI();
         }
       };
@@ -1588,7 +1588,7 @@ def nca_step_mid_widget(
     function render({ model, el }) {
       const root = document.createElement("div");
       root.style.cssText = "font-family:sans-serif; max-width: 700px;";
-  
+
       const midCard = document.createElement("div");
       midCard.style.cssText = "background: #fff; margin-bottom: 20px;";
       const midContent = document.createElement("div");
@@ -1615,16 +1615,16 @@ def nca_step_mid_widget(
       };
 
       const nbWrap = mkWrap(nbCv, "3x3 Input Patch");
-  
+
       const svgNS = "http://www.w3.org/2000/svg";
       const nnSvg = document.createElementNS(svgNS, "svg");
       nnSvg.setAttribute("width", "260");
       nnSvg.setAttribute("height", "220");
-  
+
       const layers = [{nodes: 9, x: 30}, {nodes: 6, x: 130}, {nodes: 1, x: 230}];
       const lines = [];
       const textNodes = { inputs: [], hidden: [], output: [] };
-  
+
       for(let i=0; i<layers.length-1; i++) {
         const l1 = layers[i], l2 = layers[i+1];
         const dy1 = 220 / (l1.nodes + 1), dy2 = 220 / (l2.nodes + 1);
@@ -1635,22 +1635,22 @@ def nca_step_mid_widget(
             line.setAttribute("y1", n1 * dy1);
             line.setAttribute("x2", l2.x);
             line.setAttribute("y2", n2 * dy2);
-        
+
             const weight = Math.sin(n1 * 13.3 + n2 * 17.7 + i * 23.1);
             const baseColor = weight > 0 ? `rgba(78, 121, 167, ${Math.abs(weight)*0.4 + 0.15})` : `rgba(225, 87, 89, ${Math.abs(weight)*0.4 + 0.15})`;
             const activeColor = weight > 0 ? `rgba(78, 121, 167, 1)` : `rgba(225, 87, 89, 1)`;
-        
+
             line.setAttribute("stroke", baseColor);
             line.setAttribute("stroke-width", "1.5");
             line.dataset.baseColor = baseColor;
             line.dataset.activeColor = activeColor;
-        
+
             nnSvg.appendChild(line);
             lines.push(line);
           }
         }
       }
-  
+
       layers.forEach((l, layerIdx) => {
         const dy = 220 / (l.nodes + 1);
         for(let n=1; n<=l.nodes; n++) {
@@ -1662,7 +1662,7 @@ def nca_step_mid_widget(
           circle.setAttribute("stroke", "#6c8ebf");
           circle.setAttribute("stroke-width", "1.5");
           nnSvg.appendChild(circle);
-      
+
           const text = document.createElementNS(svgNS, "text");
           text.setAttribute("x", l.x);
           text.setAttribute("y", n * dy);
@@ -1673,7 +1673,7 @@ def nca_step_mid_widget(
           text.setAttribute("font-weight", "bold");
           text.setAttribute("fill", "#333");
           nnSvg.appendChild(text);
-      
+
           if (layerIdx === 0) textNodes.inputs.push(text);
           else if (layerIdx === 1) textNodes.hidden.push(text);
           else textNodes.output.push(text);
@@ -1688,7 +1688,7 @@ def nca_step_mid_widget(
       nnWrap.append(nnSvg, nnLbl);
 
       const nsWrap = mkWrap(nsCv, "Next Cell State");
-  
+
       midContent.append(nbWrap, nnWrap, nsWrap);
       midCard.appendChild(midContent);
       root.appendChild(midCard);
@@ -1700,16 +1700,16 @@ def nca_step_mid_widget(
         const cidx = model.get("cell_idx");
         const H = model.get("h");
         const W = model.get("w");
-    
+
         if (!grids || !grids[tidx]) return;
-    
+
         const cur = grids[tidx];
         const nxt = grids[tidx+1];
         const r = Math.floor(cidx / W);
         const c = cidx % W;
-    
+
         const inputs = [];
-    
+
         const ctxNb = nbCv.getContext("2d");
         ctxNb.clearRect(0,0,nbCv.width,nbCv.height);
         for (let dr = -1; dr <= 1; dr++) {
@@ -1718,11 +1718,11 @@ def nca_step_mid_widget(
             const nc = ((c + dc) % W + W) % W;
             const state = cur[nr][nc];
             inputs.push(state);
-        
+
             const px = (dc + 1) * NB, py = (dr + 1) * NB;
             ctxNb.fillStyle = COLORS[state % COLORS.length];
             ctxNb.fillRect(px, py, NB, NB);
-        
+
             if (dr === 0 && dc === 0) {
               ctxNb.strokeStyle = "#e15759";
               ctxNb.lineWidth = 3;
@@ -1735,7 +1735,7 @@ def nca_step_mid_widget(
             ctxNb.fillText(state, px + NB / 2, py + NB / 2);
           }
         }
-    
+
         const ctxNs = nsCv.getContext("2d");
         let outState = "";
         if (nxt && nxt[r]) {
@@ -1743,26 +1743,26 @@ def nca_step_mid_widget(
             outState = state;
             ctxNs.fillStyle = COLORS[state % COLORS.length];
             ctxNs.fillRect(0, 0, NB, NB);
-        
+
             ctxNs.fillStyle = "rgba(255,255,255,0.9)";
             ctxNs.font = `bold ${Math.floor(NB * 0.5)}px sans-serif`;
             ctxNs.textAlign = "center"; ctxNs.textBaseline = "middle";
             ctxNs.fillText(state, NB / 2, NB / 2);
         }
-    
+
         inputs.forEach((val, i) => {
             if(textNodes.inputs[i]) textNodes.inputs[i].textContent = val;
         });
-    
+
         textNodes.hidden.forEach((node, i) => {
             const pseudo = Math.sin(cidx * 12.34 + tidx * 5.67 + i * 8.9) * 2 - 1;
             node.textContent = pseudo.toFixed(1);
         });
-    
+
         if (textNodes.output[0]) {
             textNodes.output[0].textContent = outState;
         }
-    
+
         lines.forEach(l => {
           if(Math.random() > 0.7) l.setAttribute("stroke", l.dataset.activeColor);
           else l.setAttribute("stroke", l.dataset.baseColor);
@@ -1795,7 +1795,7 @@ def nca_step_mid_widget(
         [
             mo.md(
                 """### Neural Network Rule Evaluation
-            
+
     For the highlighted cell, the network takes its 3x3 neighborhood, passes it through the learned weights, and outputs a single new state."""
             ),
             nca_mid,
@@ -1825,7 +1825,7 @@ def nca_step_bot_widget(
     function render({ model, el }) {
       const root = document.createElement("div");
       root.style.cssText = "font-family:sans-serif; max-width: 700px;";
-  
+
       const botCard = document.createElement("div");
       botCard.style.cssText = "background: #fff; margin-bottom: 20px;";
 
@@ -1834,7 +1834,7 @@ def nca_step_bot_widget(
       const cv = document.createElement("canvas");
       cv.width = W * CELL; cv.height = H * CELL;
       cv.style.cssText = "display:block;flex-shrink:0;";
-  
+
       botCard.appendChild(cv);
       root.appendChild(botCard);
       el.appendChild(root);
@@ -1845,7 +1845,7 @@ def nca_step_bot_widget(
         const cidx = model.get("cell_idx");
         if (!grids || !grids[tidx+1]) return;
         const nxt = grids[tidx+1];
-    
+
         const ctx = cv.getContext("2d");
         ctx.clearRect(0,0,cv.width,cv.height);
         for (let r = 0; r < H; r++) {
@@ -2542,16 +2542,16 @@ def timestep_unroller(
         render({ model, el }) {
             const root = document.createElement("div");
             root.style.cssText = "font-family:sans-serif; user-select:none; max-width: 1000px; padding: 20px; background: #fff;";
-        
+
             const container = document.createElement("div");
             container.style.cssText = "display: flex; gap: 30px; align-items: flex-start;";
-        
+
             const col1 = document.createElement("div");
             col1.style.cssText = "display: flex; flex-direction: column; align-items: center; gap: 10px; width: 230px;";
             const title1 = document.createElement("div");
             title1.textContent = "1. 12x12 Grid";
             title1.style.cssText = "font-size: 14px; font-weight: 600; color: #444; width: 100%;";
-        
+
             const W = model.get("w");
             const H = model.get("h");
             const canvas = document.createElement("canvas");
@@ -2559,41 +2559,41 @@ def timestep_unroller(
             canvas.height = H * CELL;
             canvas.style.cssText = "border: 1px solid #eee; border-radius: 4px; display: block;";
             const ctx = canvas.getContext("2d");
-        
+
             col1.append(title1, canvas);
-        
+
             const col2 = document.createElement("div");
             col2.style.cssText = "display: flex; flex-direction: column; gap: 10px; width: 350px;";
             const title2 = document.createElement("div");
             title2.textContent = "2. Visual Patches (36 total)";
             title2.style.cssText = "font-size: 14px; font-weight: 600; color: #444;";
-        
+
             const seqContainer = document.createElement("div");
             seqContainer.style.cssText = "display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 10px; background: #fdfdfd; border-radius: 6px; height: 320px; overflow-y: auto; align-content: start; border: 1px solid #f0f0f0;";
-        
+
             col2.append(title2, seqContainer);
-        
+
             const col3 = document.createElement("div");
             col3.style.cssText = "display: flex; flex-direction: column; gap: 10px; flex: 1;";
             const title3 = document.createElement("div");
             title3.textContent = "3. Serialized Output";
             title3.style.cssText = "font-size: 14px; font-weight: 600; color: #444;";
-        
+
             const textOutput = document.createElement("div");
             textOutput.style.cssText = "padding: 12px; background: #f4f4f4; border-radius: 6px; font-family: 'Fira Code', 'Courier New', monospace; font-size: 12px; color: #333; line-height: 1.6; height: 320px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; border: 1px solid #eee;";
             textOutput.textContent = "<grid> ";
-        
+
             col3.append(title3, textOutput);
 
             container.append(col1, col2, col3);
-        
+
             const controls = document.createElement("div");
             controls.style.cssText = "margin-top: 20px; display: flex; gap: 15px; align-items: center;";
-        
+
             const stepBtn = document.createElement("button");
             stepBtn.textContent = "Process Next Patch";
             stepBtn.style.cssText = "padding: 8px 20px; background: #4e79a7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;";
-        
+
             const resetBtn = document.createElement("button");
             resetBtn.textContent = "Reset";
             resetBtn.style.cssText = "padding: 8px 16px; background: #fff; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;";
@@ -2604,16 +2604,16 @@ def timestep_unroller(
 
             const progressText = document.createElement("div");
             progressText.style.cssText = "font-size: 13px; color: #666; font-family: monospace;";
-        
+
             controls.append(stepBtn, resetBtn, newRuleBtn, progressText);
             root.append(container, controls);
             el.append(root);
-        
+
             let patchIdx = 0;
             const totalPatches = (W/PATCH) * (H/PATCH);
             let frames = model.get("frames");
             let grid = frames[0];
-        
+
             function drawGrid() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 for (let r = 0; r < H; r++) {
@@ -2630,7 +2630,7 @@ def timestep_unroller(
                     ctx.strokeRect(pc * PATCH * CELL, pr * PATCH * CELL, PATCH * CELL, PATCH * CELL);
                 }
             }
-        
+
             function addToken() {
                 if (patchIdx >= totalPatches) return;
                 const pr = Math.floor(patchIdx / (W/PATCH));
@@ -2664,7 +2664,7 @@ def timestep_unroller(
                 progressText.textContent = `Patch ${patchIdx}/${totalPatches}`;
                 drawGrid();
             }
-        
+
             stepBtn.addEventListener("click", addToken);
             resetBtn.addEventListener("click", () => {
                 patchIdx = 0; seqContainer.innerHTML = ""; textOutput.textContent = "<grid> "; progressText.textContent = ""; drawGrid();
@@ -2896,6 +2896,19 @@ def sequence_evolution_anim(
 
 
 @app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### What the model learns to predict
+
+    The model is trained with the same next-token prediction objective used in
+    language modeling. Rules in the structured complexity band give the model
+    something genuinely meaningful to predict: local patterns that evolve
+    without simply repeating, the NCA equivalent of coherent prose.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
 def aha_moment_intro(mo):
     mo.md(r"""
     ### The "Aha!" Moment: In-Context Rule Inference
@@ -2916,13 +2929,13 @@ def predictor_view(anywidget, shared_nca, traitlets):
         render({ model, el }) {
             const root = document.createElement("div");
             root.style.cssText = "font-family:sans-serif; background:#fff; padding:20px; border-radius:8px; border:1px solid #eee;";
-        
+
             const topRow = document.createElement("div");
             topRow.style.cssText = "display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px;";
-        
+
             const mainCol = document.createElement("div");
             mainCol.style.cssText = "flex: 1; display: flex; flex-direction: column; gap: 15px;";
-        
+
             const sideCol = document.createElement("div");
             sideCol.style.cssText = "width: 180px; display: flex; flex-direction: column; gap: 10px; align-items: center; border-left: 1px solid #eee; padding-left: 20px;";
 
@@ -2930,27 +2943,27 @@ def predictor_view(anywidget, shared_nca, traitlets):
             canvas.width = 144; canvas.height = 144;
             canvas.style.cssText = "border: 1px solid #eee; border-radius: 4px; background: #fafafa;";
             const ctx = canvas.getContext("2d");
-        
+
             const sideLabel = document.createElement("div");
             sideLabel.textContent = "Attention Focus (t-1)";
             sideLabel.style.cssText = "font-size: 12px; font-weight: 600; color: #666;";
-        
+
             sideCol.append(sideLabel, canvas);
 
             const streamLabel = document.createElement("div");
             streamLabel.textContent = "Transformer Context Window (Tokens)";
             streamLabel.style.cssText = "font-size: 12px; font-weight: 600; color: #666;";
-        
+
             const streamScroll = document.createElement("div");
             streamScroll.style.cssText = "display: flex; gap: 4px; overflow-x: auto; padding: 10px; background: #f4f4f4; border-radius: 4px; border: 1px solid #eee; height: 40px; align-items: center; white-space: nowrap;";
-        
+
             const chartLabel = document.createElement("div");
             chartLabel.textContent = "Model Surprise (Entropy / Loss)";
             chartLabel.style.cssText = "font-size: 12px; font-weight: 600; color: #666;";
-        
+
             const chartContainer = document.createElement("div");
             chartContainer.style.cssText = "height: 120px; width: 100%; position: relative; border-bottom: 2px solid #ccc; border-left: 2px solid #ccc;";
-        
+
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", "100%");
             svg.setAttribute("height", "100%");
@@ -2966,7 +2979,7 @@ def predictor_view(anywidget, shared_nca, traitlets):
             slider.min = 0;
             slider.max = 143; // 144 tokens total
             slider.value = 0;
-        
+
             root.append(topRow, slider);
             el.append(root);
 
@@ -3007,14 +3020,14 @@ def predictor_view(anywidget, shared_nca, traitlets):
                 const patchInGrid = idx % 36;
                 const frames = model.get("frames");
                 const grid = frames[gridIdx];
-            
+
                 for(let r=0; r<12; r++) {
                     for(let c=0; c<12; c++) {
                         ctx.fillStyle = COLORS[grid[r][c] % COLORS.length] + "44";
                         ctx.fillRect(c*CELL, r*CELL, CELL, CELL);
                     }
                 }
-            
+
                 const pr = Math.floor(patchInGrid / 6);
                 const pc = patchInGrid % 6;
                 ctx.strokeStyle = "#e15759";
@@ -3082,19 +3095,6 @@ def final_conclusion(mo):
 
     ---
     *This interactive notebook was built to explore the mechanics of [Your Paper Title/Link]. By bridgeing the gap between spatial cellular automata and sequential language models, we can see how simple local rules emerge into complex global intelligence.*
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ### What the model learns to predict
-
-    The model is trained with the same next-token prediction objective used in
-    language modeling. Rules in the structured complexity band give the model
-    something genuinely meaningful to predict: local patterns that evolve
-    without simply repeating, the NCA equivalent of coherent prose.
     """)
     return
 
