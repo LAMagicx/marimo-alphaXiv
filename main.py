@@ -1,3 +1,23 @@
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""
+Training Language Models via Neural Cellular Automata
+=====================================================
+
+An interactive marimo notebook exploring the core ideas of
+"Training Language Models via Neural Cellular Automata"
+(arXiv:2603.10055) by Dan Lee, Seungwook Han, Akarsh Kumar,
+and Pulkit Agrawal (MIT / Improbable AI Lab).
+
+This notebook demonstrates how abstract, non-linguistic patterns
+from Neural Cellular Automata can pre-pre-train a Transformer,
+making it learn language tasks faster and more efficiently than
+starting from scratch or even pre-training on real text.
+
+Created by Magic (@LAMagicx) for the alphaXiv x marimo competition.
+"""
+
 import marimo
 
 __generated_with = "0.23.0"
@@ -426,7 +446,6 @@ def helper_functions(
         PowerTracker,
         TinyGPT,
         finetune,
-        make_batch,
         make_nca_batch,
         plot_training_log,
         predict_reverse,
@@ -4009,204 +4028,6 @@ def weight_to_attention_bridge(mo):
 
 
 @app.cell(hide_code=True)
-def attention_transfer_intro_md(mo):
-    mo.md(r"""
-    ## The Attention Transfer Experiment
-
-    Below, we take the fine-tuned NCA model and reset specific weight groups back to random initialization. If attention carries the transferable primitives, resetting it should devastate performance. If MLPs are domain-specific, resetting them should barely matter.
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def attention_transfer_experiment(
-    PREDICT_DIGITS,
-    alt,
-    make_batch,
-    mo,
-    nca_model,
-    nn,
-    pd,
-    torch,
-):
-    import copy as _copy
-
-
-    def _selective_reset_test(base_model, n_samples=256):
-        """Test model performance with selective weight resets."""
-        results = {}
-
-        base_model.eval()
-        with torch.no_grad():
-            xv, yv = make_batch(n_samples)
-            acc_full = (
-                (
-                    base_model(xv)[:, PREDICT_DIGITS:, :].argmax(-1)
-                    == yv[:, PREDICT_DIGITS:]
-                )
-                .float()
-                .mean()
-                .item()
-            )
-        results["Full NCA Model"] = acc_full
-
-        attn_reset = _copy.deepcopy(base_model)
-        with torch.no_grad():
-            for block in attn_reset.blocks:
-                attn = block.self_attn
-                nn.init.xavier_uniform_(attn.in_proj_weight)
-                nn.init.xavier_uniform_(attn.out_proj.weight)
-                if attn.in_proj_bias is not None:
-                    nn.init.zeros_(attn.in_proj_bias)
-                nn.init.zeros_(attn.out_proj.bias)
-        attn_reset.eval()
-        with torch.no_grad():
-            acc_no_attn = (
-                (
-                    attn_reset(xv)[:, PREDICT_DIGITS:, :].argmax(-1)
-                    == yv[:, PREDICT_DIGITS:]
-                )
-                .float()
-                .mean()
-                .item()
-            )
-        results["Reset Attention"] = acc_no_attn
-
-        mlp_reset = _copy.deepcopy(base_model)
-        with torch.no_grad():
-            for block in mlp_reset.blocks:
-                nn.init.xavier_uniform_(block.linear1.weight)
-                nn.init.xavier_uniform_(block.linear2.weight)
-                nn.init.zeros_(block.linear1.bias)
-                nn.init.zeros_(block.linear2.bias)
-        mlp_reset.eval()
-        with torch.no_grad():
-            acc_no_mlp = (
-                (
-                    mlp_reset(xv)[:, PREDICT_DIGITS:, :].argmax(-1)
-                    == yv[:, PREDICT_DIGITS:]
-                )
-                .float()
-                .mean()
-                .item()
-            )
-        results["Reset MLP"] = acc_no_mlp
-
-        both_reset = _copy.deepcopy(base_model)
-        with torch.no_grad():
-            for block in both_reset.blocks:
-                attn = block.self_attn
-                nn.init.xavier_uniform_(attn.in_proj_weight)
-                nn.init.xavier_uniform_(attn.out_proj.weight)
-                if attn.in_proj_bias is not None:
-                    nn.init.zeros_(attn.in_proj_bias)
-                nn.init.zeros_(attn.out_proj.bias)
-                nn.init.xavier_uniform_(block.linear1.weight)
-                nn.init.xavier_uniform_(block.linear2.weight)
-                nn.init.zeros_(block.linear1.bias)
-                nn.init.zeros_(block.linear2.bias)
-        both_reset.eval()
-        with torch.no_grad():
-            acc_both = (
-                (
-                    both_reset(xv)[:, PREDICT_DIGITS:, :].argmax(-1)
-                    == yv[:, PREDICT_DIGITS:]
-                )
-                .float()
-                .mean()
-                .item()
-            )
-        results["Reset Both"] = acc_both
-
-        return results
-
-
-    _nca_results = _selective_reset_test(nca_model)
-
-    _config_colors = {
-        "Full NCA Model": "#59a14f",
-        "Reset Attention": "#e15759",
-        "Reset MLP": "#4e79a7",
-        "Reset Both": "#999999",
-    }
-
-    _at_df = pd.DataFrame(
-        [{"config": k, "accuracy": v} for k, v in _nca_results.items()]
-    )
-
-    _at_chart = (
-        alt.Chart(_at_df)
-        .mark_bar(cornerRadiusEnd=6)
-        .encode(
-            x=alt.X(
-                "accuracy:Q",
-                title="Reversal Accuracy",
-                scale=alt.Scale(domain=[0, 1]),
-            ),
-            y=alt.Y("config:N", sort=list(_nca_results.keys()), title=None),
-            color=alt.Color(
-                "config:N",
-                scale=alt.Scale(
-                    domain=list(_config_colors.keys()),
-                    range=list(_config_colors.values()),
-                ),
-                legend=None,
-            ),
-        )
-        .properties(
-            width=500,
-            height=200,
-            title="Effect of Selective Weight Reset on NCA-Trained Model",
-        )
-    )
-
-    _full_acc = _nca_results["Full NCA Model"]
-    _attn_acc = _nca_results["Reset Attention"]
-    _mlp_acc = _nca_results["Reset MLP"]
-    _attn_drop = (_full_acc - _attn_acc) / _full_acc * 100 if _full_acc > 0 else 0
-    _mlp_drop = (_full_acc - _mlp_acc) / _full_acc * 100 if _full_acc > 0 else 0
-
-    mo.vstack(
-        [
-            _at_chart,
-            mo.hstack(
-                [
-                    mo.stat(
-                        value=f"{_full_acc:.1%}", label="Full Model", bordered=True
-                    ),
-                    mo.stat(
-                        value=f"{_attn_acc:.1%}",
-                        label="Reset Attention",
-                        bordered=True,
-                    ),
-                    mo.stat(
-                        value=f"{_mlp_acc:.1%}", label="Reset MLP", bordered=True
-                    ),
-                    mo.stat(
-                        value=f"{_nca_results['Reset Both']:.1%}",
-                        label="Reset Both",
-                        bordered=True,
-                    ),
-                ],
-                justify="center",
-                gap="1rem",
-            ),
-            mo.callout(
-                mo.md(
-                    f"**Resetting attention** drops accuracy by **{_attn_drop:.0f}%**, destroying the learned "
-                    f"computational primitives.\n\n"
-                    f"**Resetting MLP** drops accuracy by only **{_mlp_drop:.0f}%**. The MLP stores "
-                    f"task-specific patterns that are less critical to the model's core reasoning ability.\n\n"
-                    f"This confirms the paper's finding: **attention layers are the universal carrier of transferable capabilities**."
-                ),
-                kind="info",
-            ),
-        ]
-    )
-    return
-
-
-@app.cell(hide_code=True)
 def notebook_conclusion_md(mo):
     mo.md(r"""
     ## Putting It All Together
@@ -4224,8 +4045,6 @@ def notebook_conclusion_md(mo):
     3. **Complexity is the key.** Gzip compressibility acts as a practical filter, selecting NCA rules in the "Goldilocks zone" between trivial repetition and chaotic noise. These rules produce token distributions that follow the same Zipfian power law as natural language.
 
     4. **Domain matching matters.** The optimal NCA complexity band varies by target domain: simpler for code, more complex for web text and math.
-
-    5. **Attention carries the transfer.** The universal computational primitives learned during NCA pre-training live in the attention layers, not the MLPs. Resetting attention destroys the benefit; resetting MLPs barely matters.
 
     **The bigger picture:** If 164M synthetic NCA tokens can outperform 1.6B tokens of real language as a warm-up, perhaps the path to better AI isn't just *more* data but *better structured* data. The structural foundations of intelligence might be simpler than we thought.
 
