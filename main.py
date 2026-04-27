@@ -4014,7 +4014,6 @@ def weight_diff_arch_widget(
             kind="info",
         ),
     ])
-
     return
 
 
@@ -4053,6 +4052,25 @@ def notebook_conclusion_md(mo):
 
     *Based on [Training Language Models via Neural Cellular Automata](https://www.alphaxiv.org/abs/2603.10055) by Dan Lee, Seungwook Han, Akarsh Kumar, and Pulkit Agrawal (MIT / Improbable AI Lab).*
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def extension_nanochat_md(mo):
+    mo.md(r"""
+    ## Extension: Scaling Up with nanochat
+
+    A natural next step is to test NCA pre-pre-training on a real language model. I attempted this using Andrej Karpathy's [nanochat](https://github.com/karpathy/nanochat), a minimal GPT training pipeline designed for quick experiments on single GPUs.
+
+    The idea was straightforward: generate a corpus of NCA token sequences, run pre-pre-training for a few hundred steps, then continue with nanochat's standard language training and compare convergence against a baseline. In practice, I didn't have access to a H100, and therefore the compute time for quick successive testing was a real bottleneck as a proper comparison requires multiple seeds across both configurations.
+
+    I wonder if this is something that I can return too in the GPU version. Looking forward I had a blast doing this !
+    """)
+    return
+
+
+@app.cell
+def _():
     return
 
 
