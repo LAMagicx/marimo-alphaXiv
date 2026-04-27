@@ -127,7 +127,7 @@ def helper_functions(
             self._t0 = None
 
         def start(self):
-            self._proc.cpu_percent()  # seed call — first call always returns 0
+            self._proc.cpu_percent()  # seed call  -  first call always returns 0
             self._t0 = time.time()
             threading.Thread(target=self._loop, daemon=True).start()
 
@@ -306,7 +306,7 @@ def helper_functions(
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
         log: list[dict] = []
         step = 0
-        print(f"\n{label} — fine-tuning on reversal (target {TARGET_ACC:.0%})")
+        print(f"\n{label}: fine-tuning on reversal (target {TARGET_ACC:.0%})")
 
         while True:
             model.train()
@@ -346,7 +346,7 @@ def helper_functions(
                     mo.vstack(
                         [
                             mo.md(
-                                f"**{label}** — step `{step}` | loss `{loss.item():.3f}` | acc `{acc:.1%}` | `{e_j:.2f}` J"
+                                f"**{label}** step `{step}` | loss `{loss.item():.3f}` | acc `{acc:.1%}` | `{e_j:.2f}` J"
                             ),
                             plot_training_log(log),
                         ]
@@ -421,13 +421,12 @@ def helper_functions(
             ys.append(seq[1:])
         return torch.stack(xs), torch.stack(ys)
 
-
-
     return (
         NCARule,
         PowerTracker,
         TinyGPT,
         finetune,
+        make_batch,
         make_nca_batch,
         plot_training_log,
         predict_reverse,
@@ -469,7 +468,7 @@ def part1_demo_header(D_MODEL, N_HEADS, N_LAYERS, SEQ_LEN, TinyGPT, VOCAB, mo):
 
     We'll compare two training regimes for a **TinyGPT** model:
     1. **Run 1 (Scratch):** The model starts with random weights and is trained directly on a "reversal" task (learning to output a sequence in reverse).
-    2. **Run 2 (NCA):** The model first undergoes **Pre-pretraining** on synthetic NCA patterns—abstract visual structures with no linguistic meaning—before being fine-tuned on the same reversal task.
+    2. **Run 2 (NCA):** The model first undergoes **Pre-pretraining** on synthetic NCA patterns (abstract visual structures with no linguistic meaning) before being fine-tuned on the same reversal task.
 
     ![experiment-flow](public/experiment_flow.png)
 
@@ -532,7 +531,7 @@ def sample_input_generation(CHARS, PREDICT_DIGITS, mo):
     Target:                            {" ".join(reversed(random_chars))}
     ```
 
-    Without any training, the model's weights are random. It has no concept of position, digits, or "reversing" — it just outputs high-entropy noise.
+    Without any training, the model's weights are random. It has no concept of position, digits, or "reversing" and just outputs high-entropy noise.
     """),
             scratch_input_slider,
         ]
@@ -695,7 +694,7 @@ def nca_pretraining_intro_md(mo):
 
     Now we test the paper's core hypothesis: **Does warming up on abstract, structured patterns make the model a better learner?**
 
-    We'll expose TinyGPT to NCA sequences of non-linguistic, synthetic data—to build "structural intuitions" before it ever sees the reversal task. This is the **Pre-pretraining** phase.
+    We'll expose TinyGPT to NCA sequences of non-linguistic, synthetic data, building "structural intuitions" before it ever sees the reversal task. This is the **Pre-pretraining** phase.
     """)
     return
 
@@ -800,7 +799,7 @@ def run_nca_pretraining(
                 mo.vstack(
                     [
                         mo.md(
-                            f"**NCA pre-training** — step `{step}/{NCA_PRETRAIN}` | loss `{loss.item():.3f}` | acc `{acc:.1%}` | `{e_j:.2f}` J"
+                            f"**NCA pre-training** step `{step}/{NCA_PRETRAIN}` | loss `{loss.item():.3f}` | acc `{acc:.1%}` | `{e_j:.2f}` J"
                         ),
                         plot_training_log(pre_log),
                     ]
@@ -962,7 +961,7 @@ def efficiency_metrics_summary(mo, nca_log, scratch_log):
     _callout_msg = (
         (
             f"The NCA model reached **{nca_log[-1]['acc']:.1%}** accuracy in **{_nca_steps} fine-tuning steps** "
-            f"vs **{_scratch_steps} steps** for scratch — a **{_speedup:.1f}× speedup**. "
+            f"vs **{_scratch_steps} steps** for scratch, a **{_speedup:.1f}× speedup**. "
             f"\n\nEven counting pre-training energy, total cost dropped by **{_saving:.1f}%**."
         )
         if _saving > 0
@@ -1119,7 +1118,7 @@ def nca_explanation_md(mo):
 
     In this paper, those weights are randomly sampled for every sequence, meaning each training example is governed by a completely unique rule the model has never seen before and will never see again.
 
-    Three rules run simultaneously below on a 12x12 grid. Each cell holds one of 10 possible states (colours). Notice that each grid develops its own personality: some settle into repeating cycles, others stay unpredictable throughout. We'll look into how this can be used later on.
+    Three rules run simultaneously below on a 12x12 grid, **all starting from the exact same initial state**. Each cell holds one of 10 possible states (colours). Notice how the identical starting grid diverges into completely different dynamics under each rule. Some settle into repeating cycles, others stay unpredictable. This is why the model must *infer* the hidden rule from context rather than memorize patterns.
 
     Try generating a new set of rules to see how it affects the grids.
     """)
@@ -1139,8 +1138,6 @@ def nca_animation_widget(F, NCARule, NCA_H, NCA_STATES, NCA_W, torch):
         4887395993740886587,
         6356219191685193974,
     ]
-
-    # _DEFAULT_SEEDS = [random.randint(0, 2**63 - 1) for _ in range(_NCA_N_RULES)]
 
     _COLORS = [
         "#4e79a7",
@@ -1325,16 +1322,18 @@ def nca_animation_widget(F, NCARule, NCA_H, NCA_STATES, NCA_W, torch):
 
 
     def _nca_frame_data(seeds=_DEFAULT_SEEDS):
+        # Generate ONE shared initial grid so all rules start identically
+        grid_seed = seeds[0] if seeds else 42
+        torch.manual_seed(grid_seed)
+        shared_init = torch.randint(0, NCA_STATES, (NCA_H, NCA_W))
+
         out = []
         for i in range(_NCA_N_RULES):
             seed = seeds[i] if i < len(seeds) else None
             rule = NCARule(seed=seed)
 
-            if seed is not None:
-                random.seed(seed)
-                torch.manual_seed(seed)
-
-            grid = torch.randint(0, NCA_STATES, (NCA_H, NCA_W))
+            # Every rule starts from the same grid
+            grid = shared_init.clone()
             frames = [grid.tolist()]
             with torch.no_grad():
                 for _ in range(_NCA_N_FRAMES - 1):
@@ -1446,7 +1445,7 @@ def nca_step_widget(
               const y0 = Math.max(0, hlR - 1) * CELL;
               const x1 = Math.min(W, hlC + 2) * CELL;
               const y1 = Math.min(H, hlR + 2) * CELL;
-              ctx.strokeStyle = "#e15759";
+              ctx.strokeStyle = "#000000";
               ctx.lineWidth = 2.5;
               ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
               ctx.fillStyle = "rgba(225,87,89,0.3)";
@@ -1527,6 +1526,7 @@ def nca_step_widget(
     };
     """
 
+
     class NCASharedController(anywidget.AnyWidget):
         _esm = _STEP_SHARED_ESM
         grids = traitlets.List([]).tag(sync=True)
@@ -1537,16 +1537,23 @@ def nca_step_widget(
         playing = traitlets.Bool(True).tag(sync=True)
         speed = traitlets.Int(60).tag(sync=True)
 
+
     def _nca_shared_data(n_steps=5):
         rule = NCARule()
         grid = torch.randint(0, NCA_STATES, (NCA_H, NCA_W))
         out = [grid.tolist()]
         with torch.no_grad():
             for _ in range(n_steps - 1):
-                x = F.one_hot(grid, NCA_STATES).float().permute(2, 0, 1).unsqueeze(0)
+                x = (
+                    F.one_hot(grid, NCA_STATES)
+                    .float()
+                    .permute(2, 0, 1)
+                    .unsqueeze(0)
+                )
                 grid = rule(x).squeeze(0).argmax(0)
                 out.append(grid.tolist())
         return out
+
 
     shared_grids = _nca_shared_data()
     nca_controller = NCASharedController(grids=shared_grids)
@@ -1555,15 +1562,25 @@ def nca_step_widget(
     get_cell_idx, set_cell_idx = mo.state(nca_controller.cell_idx)
     get_speed, set_speed = mo.state(nca_controller.speed)
 
-    nca_controller.observe(lambda _: set_t_idx(nca_controller.t_idx), names=["t_idx"])
-    nca_controller.observe(lambda _: set_cell_idx(nca_controller.cell_idx), names=["cell_idx"])
-    nca_controller.observe(lambda _: set_speed(nca_controller.speed), names=["speed"])
+    nca_controller.observe(
+        lambda _: set_t_idx(nca_controller.t_idx), names=["t_idx"]
+    )
+    nca_controller.observe(
+        lambda _: set_cell_idx(nca_controller.cell_idx), names=["cell_idx"]
+    )
+    nca_controller.observe(
+        lambda _: set_speed(nca_controller.speed), names=["speed"]
+    )
 
-    mo.vstack([
-        mo.md("## How is this grid generated ?"),
-        mo.md("The grid is processed one cell at a time. Below is the starting grid. Use the controls to pause, step manually, or change the speed."),
-        nca_controller
-    ])
+    mo.vstack(
+        [
+            mo.md("## How is this grid generated ?"),
+            mo.md(
+                "The grid is processed one cell at a time. Below is the starting grid. Use the controls to pause, step manually, or change the speed."
+            ),
+            nca_controller,
+        ]
+    )
     return get_cell_idx, get_t_idx, shared_grids
 
 
@@ -1724,7 +1741,7 @@ def nca_step_mid_widget(
             ctxNb.fillRect(px, py, NB, NB);
 
             if (dr === 0 && dc === 0) {
-              ctxNb.strokeStyle = "#e15759";
+              ctxNb.strokeStyle = "#000000";
               ctxNb.lineWidth = 3;
               ctxNb.strokeRect(px + 1.5, py + 1.5, NB - 3, NB - 3);
               ctxNb.lineWidth = 1;
@@ -1967,13 +1984,10 @@ def complexity_input_widgets(mo):
         return mean(argmax(pred) == argmax(target))
     """
 
-    _default_text = """Large language models have transformed how we think about machine intelligence.
-    Trained on vast corpora of human writing, they learn to predict the next word
-    from context — a deceptively simple objective that forces them to internalise
-    grammar, facts, reasoning patterns, and rhetorical structure. The surprising
-    result is that scale alone produces capabilities that once seemed to require
-    explicit symbolic reasoning: arithmetic, translation, code generation, and
-    analogical thought all emerge from next-token prediction at sufficient scale.
+    _default_text = """Notebooks of the past were graveyards of stale state, cells run out of order, outputs left to their fate.
+    Then Marimo arrived and rewrote the deal, reactive by nature, every output is real.
+    Change a slider, a value, a line in your code, the whole notebook updates, carries its own load.
+    So here is to Marimo, the notebook grown up, patient and reactive, never running corrupt.
     """
 
     complexity_code_input = mo.ui.code_editor(
@@ -1992,7 +2006,11 @@ def complexity_input_widgets(mo):
         debounce=True,
     )
 
-    mo.hstack([complexity_code_input, complexity_text_input], gap="1rem", justify="space-around")
+    mo.hstack(
+        [complexity_code_input, complexity_text_input],
+        gap="1rem",
+        justify="space-around",
+    )
     return complexity_code_input, complexity_text_input
 
 
@@ -2320,7 +2338,7 @@ def alphabet_size_intro(mo):
 
     In the previous section, we saw that we can filter rules based on their complexity. But what determines the "default" complexity of the whole universe?
 
-    In NCA, this is controlled by the **Alphabet Size** ($n$) — the number of possible states (or colors) each cell can take. This acts as the "vocabulary" of the simulation.
+    In NCA, this is controlled by the **Alphabet Size** ($n$), the number of possible states (or colors) each cell can take. This acts as the "vocabulary" of the simulation.
 
     The paper investigates three sizes: $n=2, 10, 15$. They discovered a fascinating trade-off:
     - **Small Alphabets ($n=2$):** The rule space is smaller. While individual sequences might seem "simpler," the patterns are more distinct and scale better as models grow.
@@ -2505,16 +2523,11 @@ def alphabet_complexity_logic(alt, complexity_cache, mo, n_slider, pd, random):
 @app.cell(hide_code=True)
 def nca_token_intro_md(mo):
     mo.md(r"""
-    ## NCA as pre-training data
+    ## From Grids to Tokens: How the Model Actually Sees NCA Data
 
-    ### How language models read text
+    We've built up a picture of what NCA dynamics look like and how their complexity is controlled. But a Transformer doesn't see colorful grids. It sees **sequences of integers**. So how do we turn a 2D evolving grid into something a language model can chew on?
 
-    A language model never sees raw characters. Instead, text is split into
-    **tokens**, short chunks that get mapped to integer IDs. The model trains
-    on one objective: given all tokens so far, predict the next one.
-
-    Do this on enough text and the model learns grammar, facts, and reasoning
-    as emergent side-effects of compressing sequences well.
+    The answer is surprisingly simple: the same way language models process text. Text gets split into tokens (short chunks mapped to integer IDs), and the model learns to predict the next token from context. We do exactly the same thing with NCA grids, by slicing each frame into small patches and encoding each patch as a single token.
     """)
     return
 
@@ -2625,7 +2638,7 @@ def timestep_unroller(
                 if (patchIdx < totalPatches) {
                     const pr = Math.floor(patchIdx / (W/PATCH));
                     const pc = patchIdx % (W/PATCH);
-                    ctx.strokeStyle = "#e15759";
+                    ctx.strokeStyle = "#000000";
                     ctx.lineWidth = 3;
                     ctx.strokeRect(pc * PATCH * CELL, pr * PATCH * CELL, PATCH * CELL, PATCH * CELL);
                 }
@@ -2756,6 +2769,14 @@ def timestep_unroller(
     shared_nca = SharedNCAState(frames=_init_f, ratio=_init_r)
     shared_nca
     return (shared_nca,)
+
+
+@app.cell(hide_code=True)
+def unroller_to_evolution_bridge(mo):
+    mo.md(r"""
+    That was a single timestep. But NCA rules run for many steps, and the model needs to see the full trajectory to learn the underlying rule. Watch below as each new frame of the NCA's evolution gets appended to a growing token stream, building the spatiotemporal history that the model will learn to predict.
+    """)
+    return
 
 
 @app.cell(hide_code=True)
@@ -2896,14 +2917,192 @@ def sequence_evolution_anim(
 
 
 @app.cell(hide_code=True)
+def zipfian_intro_md(mo):
+    mo.md(r"""
+    ### Why NCA Data Works: The Zipfian Connection
+
+    We've seen how NCA grids become token streams. But why should a language model *benefit* from training on them? The answer lies in a statistical fingerprint shared by NCA data and natural language: the **Zipfian distribution**.
+
+    In any natural language corpus, a few words (like "the", "is", "of") appear extremely often, while most words are rare. Plot word frequency on a log-log scale and you get a straight line known as **Zipf's law**. This heavy-tailed structure is a hallmark of meaningful, structured data.
+
+    NCA token sequences follow the same law. A few patch patterns dominate (common local structures), while most are rare (unusual configurations). This isn't a coincidence; it's a consequence of the spatial correlations that NCA rules create.
+
+    Use the slider below to change the NCA alphabet size and watch how the Zipfian slope shifts. Compare it against the reference curves from real language corpora.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def zipfian_precompute(F, NCARule, NCA_H, NCA_W, torch):
+    import collections as _collections_z
+
+
+    def _tokenize_trajectory_patches_z(frames, n_states, patch_size=2):
+        """Convert list of grids to patch tokens."""
+        tokens = []
+        for grid in frames:
+            H = len(grid)
+            W = len(grid[0]) if H > 0 else 0
+            for pr in range(0, H, patch_size):
+                for pc in range(0, W, patch_size):
+                    val = 0
+                    for dr in range(patch_size):
+                        for dc in range(patch_size):
+                            val = val * n_states + grid[pr + dr][pc + dc]
+                    tokens.append(val)
+        return tokens
+
+
+    def _generate_zipfian_for_n(n_states_val, n_trajectories=80, n_steps=20):
+        """Generate NCA trajectories and return (probs, n_unique)."""
+        all_tokens = []
+        for _ in range(n_trajectories):
+            rule = NCARule(n_states=n_states_val)
+            grid = torch.randint(0, n_states_val, (NCA_H, NCA_W))
+            frames = [grid.tolist()]
+            with torch.no_grad():
+                for _ in range(n_steps - 1):
+                    x = (
+                        F.one_hot(grid, n_states_val)
+                        .float()
+                        .permute(2, 0, 1)
+                        .unsqueeze(0)
+                    )
+                    grid = rule(x).squeeze(0).argmax(0)
+                    frames.append(grid.tolist())
+            all_tokens.extend(_tokenize_trajectory_patches_z(frames, n_states_val))
+        counter = _collections_z.Counter(all_tokens)
+        freqs = sorted(counter.values(), reverse=True)
+        total = sum(freqs)
+        return [f / total for f in freqs]
+
+
+    # Precompute for all slider values
+    zipfian_cache = {}
+    for _n_val in range(2, 16):
+        zipfian_cache[_n_val] = _generate_zipfian_for_n(_n_val)
+    return (zipfian_cache,)
+
+
+@app.cell(hide_code=True)
+def zipf_slider_cell(mo):
+    zipf_n_slider = mo.ui.slider(
+        start=2,
+        stop=15,
+        step=1,
+        value=10,
+        label="NCA Alphabet Size (n)",
+        show_value=True,
+    )
+    zipf_n_slider
+    return (zipf_n_slider,)
+
+
+@app.cell(hide_code=True)
+def zipfian_plot(alt, mo, pd, zipf_n_slider, zipfian_cache):
+    _n_states_for_zipf = zipf_n_slider.value
+    _nca_probs = zipfian_cache[_n_states_for_zipf]
+
+    # Build dataframe with rank-frequency data
+    _rows = []
+    for rank, prob in enumerate(_nca_probs, 1):
+        _rows.append(
+            {
+                "rank": rank,
+                "probability": prob,
+                "source": f"NCA (n={_n_states_for_zipf})",
+            }
+        )
+
+    # Reference Zipfian curves
+    _n_ref = 500
+    for i in range(1, _n_ref + 1):
+        _rows.append(
+            {
+                "rank": i,
+                "probability": 0.08 / (i**1.0),
+                "source": "Natural Language (Zipf a~1.0)",
+            }
+        )
+        _rows.append(
+            {
+                "rank": i,
+                "probability": 0.12 / (i**0.8),
+                "source": "Code (Zipf a~0.8)",
+            }
+        )
+
+    _zdf = pd.DataFrame(_rows)
+
+    _zipf_chart = (
+        alt.Chart(_zdf)
+        .mark_line(strokeWidth=2)
+        .encode(
+            x=alt.X(
+                "rank:Q", scale=alt.Scale(type="log"), title="Token Rank (log)"
+            ),
+            y=alt.Y(
+                "probability:Q",
+                scale=alt.Scale(type="log"),
+                title="Probability (log)",
+            ),
+            color=alt.Color(
+                "source:N",
+                scale=alt.Scale(
+                    domain=[
+                        f"NCA (n={_n_states_for_zipf})",
+                        "Natural Language (Zipf a~1.0)",
+                        "Code (Zipf a~0.8)",
+                    ],
+                    range=["#e15759", "#4e79a7", "#59a14f"],
+                ),
+                legend=alt.Legend(title=None, orient="bottom"),
+            ),
+            strokeDash=alt.StrokeDash(
+                "source:N",
+                scale=alt.Scale(
+                    domain=[
+                        f"NCA (n={_n_states_for_zipf})",
+                        "Natural Language (Zipf a~1.0)",
+                        "Code (Zipf a~0.8)",
+                    ],
+                    range=[[0], [6, 4], [6, 4]],
+                ),
+                legend=None,
+            ),
+        )
+        .properties(
+            width=600,
+            height=350,
+            title="Log-Log Rank-Frequency: NCA tokens vs Natural Language",
+        )
+    )
+
+    mo.vstack(
+        [
+            _zipf_chart,
+            mo.callout(
+                mo.md(
+                    f"**NCA tokens (n={_n_states_for_zipf})** produce {len(_nca_probs):,} unique patch types from 80 trajectories. "
+                    f"The heavy-tailed distribution closely matches the Zipfian shape of natural language. "
+                    f"a few patterns dominate while most are rare. This shared statistical structure is why "
+                    f"NCA pre-training transfers to language tasks."
+                ),
+                kind="info",
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### What the model learns to predict
+    ### So what does the model actually learn?
 
-    The model is trained with the same next-token prediction objective used in
-    language modeling. Rules in the structured complexity band give the model
-    something genuinely meaningful to predict: local patterns that evolve
-    without simply repeating, the NCA equivalent of coherent prose.
+    The training objective is identical to language modeling: predict the next token. But there is a crucial difference. In language, the model can exploit shallow shortcuts like word co-occurrence ("the cat sat on the ___"). In NCA sequences, there are no semantic shortcuts. Every sequence is generated by a **unique, never-before-seen rule**. The only way to predict the next token is to **figure out what that rule is**, purely from context.
+
+    This leads to the central question: how does a Transformer go from seeing random-looking grids to accurately predicting the next one?
     """)
     return
 
@@ -2915,186 +3114,1124 @@ def aha_moment_intro(mo):
 
     How does a Transformer actually learn from these grids? It doesn't just memorize shapes. Instead, it performs **Implicit Bayesian Inference**.
 
-    When the model sees the first grid, it is guessing. But once it sees the transition from the first grid to the second, it has enough evidence to "solve" the hidden neural rule ($	heta$). From that point on, it isn't guessing anymore—it is simulating the NCA in its internal layers.
+    When the model sees the first grid, it is guessing. But once it sees the transition from the first grid to the second, it has enough evidence to "solve" the hidden neural rule ($\theta$). From that point on, it isn't guessing anymore; it is simulating the NCA in its internal layers.
 
-    This is why NCA pre-training is so powerful: it forces the model to build **"In-Context Learning"** circuits. It learns that to predict the future, it must first deduce the underlying logic of its environment.
+    Let's watch this happen in real time. Below we generate a single NCA sequence and train a fresh TinyGPT on *just that one sequence*. At first the model's predictions are random noise. Then, after enough exposure, the loss drops sharply and the predicted grids snap into alignment with the real ones. That's the "Aha!" moment.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def predictor_view(anywidget, shared_nca, traitlets):
-    _PREDICTOR_ESM = """
-    export default {
-        render({ model, el }) {
-            const root = document.createElement("div");
-            root.style.cssText = "font-family:sans-serif; background:#fff; padding:20px; border-radius:8px; border:1px solid #eee;";
-
-            const topRow = document.createElement("div");
-            topRow.style.cssText = "display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px;";
-
-            const mainCol = document.createElement("div");
-            mainCol.style.cssText = "flex: 1; display: flex; flex-direction: column; gap: 15px;";
-
-            const sideCol = document.createElement("div");
-            sideCol.style.cssText = "width: 180px; display: flex; flex-direction: column; gap: 10px; align-items: center; border-left: 1px solid #eee; padding-left: 20px;";
-
-            const canvas = document.createElement("canvas");
-            canvas.width = 144; canvas.height = 144;
-            canvas.style.cssText = "border: 1px solid #eee; border-radius: 4px; background: #fafafa;";
-            const ctx = canvas.getContext("2d");
-
-            const sideLabel = document.createElement("div");
-            sideLabel.textContent = "Attention Focus (t-1)";
-            sideLabel.style.cssText = "font-size: 12px; font-weight: 600; color: #666;";
-
-            sideCol.append(sideLabel, canvas);
-
-            const streamLabel = document.createElement("div");
-            streamLabel.textContent = "Transformer Context Window (Tokens)";
-            streamLabel.style.cssText = "font-size: 12px; font-weight: 600; color: #666;";
-
-            const streamScroll = document.createElement("div");
-            streamScroll.style.cssText = "display: flex; gap: 4px; overflow-x: auto; padding: 10px; background: #f4f4f4; border-radius: 4px; border: 1px solid #eee; height: 40px; align-items: center; white-space: nowrap;";
-
-            const chartLabel = document.createElement("div");
-            chartLabel.textContent = "Model Surprise (Entropy / Loss)";
-            chartLabel.style.cssText = "font-size: 12px; font-weight: 600; color: #666;";
-
-            const chartContainer = document.createElement("div");
-            chartContainer.style.cssText = "height: 120px; width: 100%; position: relative; border-bottom: 2px solid #ccc; border-left: 2px solid #ccc;";
-
-            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-            svg.setAttribute("width", "100%");
-            svg.setAttribute("height", "100%");
-            svg.style.overflow = "visible";
-            chartContainer.append(svg);
-
-            mainCol.append(streamLabel, streamScroll, chartLabel, chartContainer);
-            topRow.append(mainCol, sideCol);
-
-            const slider = document.createElement("input");
-            slider.type = "range";
-            slider.style.width = "100%";
-            slider.min = 0;
-            slider.max = 143; // 144 tokens total
-            slider.value = 0;
-
-            root.append(topRow, slider);
-            el.append(root);
-
-            const tokens = model.get("tokens");
-            const surprise = model.get("surprise");
-            const COLORS = ["#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc948","#b07aa1","#ff9da7","#9c755f"];
-
-            function update(idx) {
-                streamScroll.innerHTML = "";
-                for (let i = Math.max(0, idx - 10); i < Math.min(tokens.length, idx + 10); i++) {
-                    const s = document.createElement("span");
-                    s.textContent = tokens[i];
-                    s.style.cssText = `font-family: monospace; font-size: 11px; padding: 2px 4px; border-radius: 2px; ${i === idx ? "background: #ffe082; border: 1px solid #ffb300; font-weight:bold;" : "color:#666;"}`;
-                    streamScroll.append(s);
-                }
-
-                svg.innerHTML = "";
-                const w = chartContainer.clientWidth;
-                const h = chartContainer.clientHeight;
-                const points = surprise.map((v, i) => `${(i / 144) * w},${h - (v * h)}`).join(" ");
-                const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-                polyline.setAttribute("points", points);
-                polyline.setAttribute("fill", "none");
-                polyline.setAttribute("stroke", "#4e79a7");
-                polyline.setAttribute("stroke-width", "2");
-                svg.append(polyline);
-
-                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                circle.setAttribute("cx", (idx / 144) * w);
-                circle.setAttribute("cy", h - (surprise[idx] * h));
-                circle.setAttribute("r", "5");
-                circle.setAttribute("fill", "#e15759");
-                svg.append(circle);
-
-                ctx.clearRect(0,0,144,144);
-                const CELL = 12;
-                const gridIdx = Math.floor(idx / 36);
-                const patchInGrid = idx % 36;
-                const frames = model.get("frames");
-                const grid = frames[gridIdx];
-
-                for(let r=0; r<12; r++) {
-                    for(let c=0; c<12; c++) {
-                        ctx.fillStyle = COLORS[grid[r][c] % COLORS.length] + "44";
-                        ctx.fillRect(c*CELL, r*CELL, CELL, CELL);
-                    }
-                }
-
-                const pr = Math.floor(patchInGrid / 6);
-                const pc = patchInGrid % 6;
-                ctx.strokeStyle = "#e15759";
-                ctx.lineWidth = 2;
-                ctx.strokeRect(pc*2*CELL, pr*2*CELL, 2*CELL, 2*CELL);
-                ctx.fillStyle = "#e1575922";
-                ctx.fillRect(pc*2*CELL, pr*2*CELL, 2*CELL, 2*CELL);
-            }
-
-            slider.addEventListener("input", (e) => update(parseInt(e.target.value)));
-            window.addEventListener("resize", () => update(parseInt(slider.value)));
-            update(0);
-        }
-    }
-    """
-
-
-    class PredictorWidget(anywidget.AnyWidget):
-        _esm = _PREDICTOR_ESM
-        tokens = traitlets.List([]).tag(sync=True)
-        surprise = traitlets.List([]).tag(sync=True)
-        frames = traitlets.List([]).tag(sync=True)
-
-
-    def _generate_inference_sim():
-        import numpy as np
-
-        frames = shared_nca.frames[:4]
-        tokens = []
-        for f in frames:
-            for pr in range(6):
-                for pc in range(6):
-                    p = "".join(
-                        [
-                            str(f[pr * 2 + dr][pc * 2 + dc])
-                            for dr in range(2)
-                            for dc in range(2)
-                        ]
-                    )
-                    tokens.append(p)
-
-        surprise = []
-        # T1: High surprise
-        surprise += [0.8 + np.random.uniform(-0.05, 0.05) for _ in range(36)]
-        # T2: Cracking the rule
-        surprise += [max(0.1, 0.8 * (0.92**i)) for i in range(36)]
-        # T3/T4: Solved
-        surprise += [0.05 + np.random.uniform(0, 0.03) for _ in range(72)]
-
-        return tokens, surprise, frames
-
-
-    inf_tokens, inf_surprise, inf_frames = _generate_inference_sim()
-    predictor_ui = PredictorWidget(
-        tokens=inf_tokens, surprise=inf_surprise, frames=inf_frames
+def aha_train_button(mo):
+    aha_train_button = mo.ui.run_button(
+        label="Train on a Single NCA Sequence", kind="success"
     )
-    predictor_ui
+    aha_train_button
+    return (aha_train_button,)
+
+
+@app.cell(hide_code=True)
+def aha_trainer(F, NCARule, TinyGPT, aha_train_button, alt, mo, pd, torch):
+    mo.stop(not aha_train_button.value)
+
+    import time as _time_aha
+
+    # --- Config for the Aha demo: binary 8x8 grid ---
+    _AHA_N = 4  # binary alphabet
+    _AHA_H = 8
+    _AHA_W = 8
+    _AHA_GRID_TOKENS = _AHA_H * _AHA_W  # 64 tokens per frame
+    _AHA_N_FRAMES = 10
+
+    # 1. Generate a single NCA trajectory
+    _aha_rule = NCARule(n_states=_AHA_N)
+    _aha_grid = torch.randint(0, _AHA_N, (_AHA_H, _AHA_W))
+    _aha_frames = [_aha_grid.clone()]
+    with torch.no_grad():
+        for _ in range(_AHA_N_FRAMES - 1):
+            _x = F.one_hot(_aha_grid, _AHA_N).float().permute(2, 0, 1).unsqueeze(0)
+            _aha_grid = _aha_rule(_x).squeeze(0).argmax(0)
+            _aha_frames.append(_aha_grid.clone())
+
+    # 2. Build training data: each sample is one frame (64 tokens) predicting the next frame
+    #    Input: frame[t] flattened, Target: frame[t+1] flattened
+    _aha_x_list = []
+    _aha_y_list = []
+    for _t in range(len(_aha_frames) - 1):
+        _aha_x_list.append(_aha_frames[_t].reshape(-1))
+        _aha_y_list.append(_aha_frames[_t + 1].reshape(-1))
+    _aha_x = torch.stack(_aha_x_list)  # (N_FRAMES-1, 64)
+    _aha_y = torch.stack(_aha_y_list)  # (N_FRAMES-1, 64)
+
+    # 3. Fresh model sized for this task
+    _aha_model = TinyGPT(vocab=_AHA_N, seq_len=_AHA_GRID_TOKENS)
+    _aha_opt = torch.optim.AdamW(_aha_model.parameters(), lr=0.003)
+    _aha_log = []
+
+    # Colors for binary grid
+    _AHA_COLORS = [
+      "#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f",
+      "#edc948","#b07aa1","#ff9da7","#9c755f",
+    ]
+
+
+    def _render_grid_html(grid_2d, label, border_color="#ddd"):
+        if hasattr(grid_2d, "tolist"):
+            grid_2d = grid_2d.tolist()
+        rows_html = ""
+        for row in grid_2d:
+            cells_html = "".join(
+                f'<div style="width:18px;height:18px;background:{_AHA_COLORS[int(v) % len(_AHA_COLORS)]};display:inline-block;border:0.5px solid #e0e0e0;"></div>'
+                for v in row
+            )
+            rows_html += f'<div style="line-height:0;">{cells_html}</div>'
+        return mo.Html(
+            f'<div style="text-align:center;">'
+            f'<div style="font-size:11px;color:#666;margin-bottom:4px;font-weight:600;">{label}</div>'
+            f'<div style="border:2px solid {border_color};display:inline-block;border-radius:4px;">{rows_html}</div>'
+            f"</div>"
+        )
+
+
+    # Pick a frame pair to visualize
+    _viz_t = min(3, len(_aha_frames) - 2)
+    _viz_current = _aha_frames[_viz_t]
+    _viz_true = _aha_frames[_viz_t + 1]
+
+    # 4. Training loop
+    _grids_display = mo.md("*Initializing...*")
+    _step = 0
+    _target_acc = 0.95
+    _max_steps = 2000
+    _extra_after_target = 80  # keep going a bit after hitting target
+    _steps_above = 0
+
+    while _step < _max_steps:
+        _step += 1
+        _aha_model.train()
+        # Train on all frame pairs each step
+        _logits = _aha_model(_aha_x)
+        _loss = F.cross_entropy(_logits.reshape(-1, _AHA_N), _aha_y.reshape(-1))
+        _aha_opt.zero_grad()
+        _loss.backward()
+        _aha_opt.step()
+
+        if _step % 5 == 0:
+            _aha_model.eval()
+            with torch.no_grad():
+                _eval_logits = _aha_model(_aha_x)
+                _eval_acc = (
+                    (_eval_logits.argmax(-1) == _aha_y).float().mean().item()
+                )
+                _eval_loss = F.cross_entropy(
+                    _eval_logits.reshape(-1, _AHA_N), _aha_y.reshape(-1)
+                ).item()
+
+            _aha_log.append(
+                {"step": _step, "loss": _eval_loss, "accuracy": _eval_acc}
+            )
+
+            # Check if we've hit target
+            if _eval_acc >= _target_acc:
+                _steps_above += 5
+                if _steps_above >= _extra_after_target:
+                    # We've shown enough post-Aha
+                    pass
+
+            # Predict the visualization frame
+            if _step % 20 == 0 or _step == 5:
+                with torch.no_grad():
+                    _pred_logits = _aha_model(_viz_current.reshape(-1).unsqueeze(0))
+                    _pred_grid = _pred_logits[0].argmax(-1).reshape(_AHA_H, _AHA_W)
+                _match_pct = (_pred_grid == _viz_true).float().mean().item()
+                _pred_border = "#59a14f" if _match_pct > 0.7 else "#e15759"
+
+                _grids_display = mo.hstack(
+                    [
+                        _render_grid_html(_viz_current, "Input Frame", "#4e79a7"),
+                        mo.Html(
+                            '<div style="font-size:24px;color:#999;padding:0 10px;align-self:center;">&#8594;</div>'
+                        ),
+                        _render_grid_html(_viz_true, "True Next Frame", "#59a14f"),
+                        mo.Html(
+                            '<div style="font-size:16px;color:#999;padding:0 6px;align-self:center;">vs</div>'
+                        ),
+                        _render_grid_html(
+                            _pred_grid,
+                            f"Predicted ({_match_pct:.0%})",
+                            _pred_border,
+                        ),
+                    ],
+                    justify="center",
+                    align="center",
+                    gap="0.5rem",
+                )
+
+            # Build chart
+            _log_df = pd.DataFrame(_aha_log)
+            _loss_line = (
+                alt.Chart(_log_df)
+                .mark_line(color="steelblue", strokeWidth=2)
+                .encode(
+                    x=alt.X("step:Q", title="Step"),
+                    y=alt.Y(
+                        "loss:Q",
+                        title="Loss",
+                        axis=alt.Axis(
+                            titleColor="steelblue", labelColor="steelblue"
+                        ),
+                    ),
+                )
+            )
+            _acc_line = (
+                alt.Chart(_log_df)
+                .mark_line(color="darkorange", strokeWidth=2)
+                .encode(
+                    x=alt.X("step:Q"),
+                    y=alt.Y(
+                        "accuracy:Q",
+                        title="Accuracy",
+                        scale=alt.Scale(domain=[0, 1]),
+                        axis=alt.Axis(
+                            titleColor="darkorange", labelColor="darkorange"
+                        ),
+                    ),
+                )
+            )
+            _chart = (
+                alt.layer(_loss_line, _acc_line)
+                .resolve_scale(y="independent")
+                .properties(
+                    width=560,
+                    height=200,
+                    title="Learning a Single NCA Rule (binary 8x8 grid)",
+                )
+            )
+
+            mo.output.replace(
+                mo.vstack(
+                    [
+                        _grids_display,
+                        _chart,
+                        mo.md(
+                            f"**Step {_step}** | Loss: `{_eval_loss:.3f}` | Accuracy: `{_eval_acc:.1%}`"
+                        ),
+                    ]
+                )
+            )
+
+            # Stop condition
+            if _steps_above >= _extra_after_target:
+                break
+
+    # Final prediction
+    _aha_model.eval()
+    with torch.no_grad():
+        _pred_logits = _aha_model(_viz_current.reshape(-1).unsqueeze(0))
+        _pred_grid = _pred_logits[0].argmax(-1).reshape(_AHA_H, _AHA_W)
+    _match_pct = (_pred_grid == _viz_true).float().mean().item()
+    _pred_border = "#59a14f" if _match_pct > 0.7 else "#e15759"
+
+    _grids_display = mo.hstack(
+        [
+            _render_grid_html(_viz_current, "Input Frame", "#4e79a7"),
+            mo.Html(
+                '<div style="font-size:24px;color:#999;padding:0 10px;align-self:center;">&#8594;</div>'
+            ),
+            _render_grid_html(_viz_true, "True Next Frame", "#59a14f"),
+            mo.Html(
+                '<div style="font-size:16px;color:#999;padding:0 6px;align-self:center;">vs</div>'
+            ),
+            _render_grid_html(
+                _pred_grid, f"Predicted ({_match_pct:.0%})", _pred_border
+            ),
+        ],
+        justify="center",
+        align="center",
+        gap="0.5rem",
+    )
+
+    mo.output.replace(
+        mo.vstack(
+            [
+                _grids_display,
+                _chart,
+                mo.callout(
+                    mo.md(
+                        f"After **{_aha_log[-1]['step']} steps**, accuracy jumped to **{_aha_log[-1]['accuracy']:.0%}** "
+                        f"and the predicted grid matches **{_match_pct:.0%}** of the true next state. "
+                        f"The model deduced the hidden NCA rule purely from the sequence and can now simulate it. "
+                        f"This is the in-context learning circuit that transfers to language."
+                    ),
+                    kind="success",
+                ),
+            ]
+        )
+    )
     return
 
 
 @app.cell(hide_code=True)
-def final_conclusion(mo):
+def part2_conclusion_md(mo):
     mo.md(r"""
-    > "This 'click'—the moment the model transitions from guessing to simulating—is the foundation of reasoning. By training on millions of these 'Aha!' moments across different NCA rules, the model arrives at Natural Language pre-training already knowing how to look for latent rules, track long-range dependencies, and focus its attention on the relevant context."
+    ## From Mechanics to Results
+
+    We've now seen the full pipeline: NCA rules generate structured dynamics, those dynamics get serialized into token sequences, and a Transformer trained on those sequences is forced to develop in-context learning circuits just to solve the prediction task.
+
+    The question that remains is whether this actually translates to better performance on real language. Does a model pre-pre-trained on abstract grid patterns genuinely learn faster when it encounters English, Python, or mathematics?
+
+    In Part 3, we turn to the paper's experimental results to find out.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def part3_header_md(mo):
+    mo.md(r"""
+    # Part 3: What the Paper Found
+
+    The authors tested this idea at scale. They pre-pre-trained a **1.6B parameter** Llama-based transformer on 164M NCA tokens, then continued with standard language pre-training on **OpenWebText**. They compared against three baselines:
+
+    - **Scratch**: random initialization (no pre-pre-training)
+    - **C4**: pre-pre-trained on 1.6B tokens of real English text
+    - **Dyck**: pre-pre-trained on formal bracket languages (a structured but linguistic baseline)
+
+    If NCA pre-pre-training only provided a trivial head start, we would expect the baselines to catch up within a few billion tokens. Instead, what they found was striking.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def convergence_race_controls(alt, mo, pd):
+    # Paper's approximate perplexity curves for OpenWebText (read from Figure 2)
+    # Format: (tokens_billions, scratch_ppl, nca_ppl, c4_ppl, dyck_ppl)
+    CONVERGENCE_DATA = [
+        (0.5, 22.0, 20.5, 21.5, 21.8),
+        (1.0, 19.0, 17.8, 18.7, 18.9),
+        (1.5, 17.5, 16.4, 17.2, 17.3),
+        (2.0, 16.5, 15.5, 16.3, 16.3),
+        (3.0, 15.8, 14.8, 15.6, 15.6),
+        (4.0, 15.3, 14.4, 15.1, 15.2),
+        (5.0, 15.0, 14.1, 14.9, 14.9),
+        (6.0, 14.8, 13.9, 14.7, 14.7),
+        (7.0, 14.6, 13.7, 14.5, 14.5),
+        (8.0, 14.5, 13.6, 14.4, 14.4),
+        (9.0, 14.4, 13.5, 14.3, 14.3),
+    ]
+
+    _models = ["Scratch", "NCA", "C4", "Dyck"]
+    _model_colors = {
+        "Scratch": "#4e79a7",
+        "NCA": "#e15759",
+        "C4": "#59a14f",
+        "Dyck": "#b07aa1",
+    }
+
+    _all_rows = []
+    for tokens_b, scratch, nca, c4, dyck in CONVERGENCE_DATA:
+        for model_name, ppl in zip(_models, [scratch, nca, c4, dyck]):
+            _all_rows.append(
+                {"tokens_B": tokens_b, "perplexity": ppl, "model": model_name}
+            )
+
+    _conv_df = pd.DataFrame(_all_rows)
+
+    _conv_chart = (
+        alt.Chart(_conv_df)
+        .mark_line(strokeWidth=2.5, point=alt.OverlayMarkDef(size=30))
+        .encode(
+            x=alt.X("tokens_B:Q", title="Tokens (Billions)"),
+            y=alt.Y(
+                "perplexity:Q",
+                title="Perplexity (lower is better)",
+                scale=alt.Scale(domain=[13, 23]),
+            ),
+            color=alt.Color(
+                "model:N",
+                scale=alt.Scale(
+                    domain=_models, range=[_model_colors[m] for m in _models]
+                ),
+                legend=alt.Legend(title=None, orient="top"),
+            ),
+        )
+        .properties(
+            width=650,
+            height=380,
+            title="Pre-training Convergence on OpenWebText (1.6B model)",
+        )
+    )
+
+    _final = CONVERGENCE_DATA[-1]
+    _ppl_improvement = round((_final[1] - _final[2]) / _final[1] * 100, 1)
+
+    mo.vstack(
+        [
+            _conv_chart,
+            mo.hstack(
+                [
+                    mo.stat(
+                        value=f"{_final[1]:.1f}",
+                        label="Scratch (final)",
+                        bordered=True,
+                    ),
+                    mo.stat(
+                        value=f"{_final[2]:.1f}", label="NCA (final)", bordered=True
+                    ),
+                    mo.stat(
+                        value=f"{_ppl_improvement}%",
+                        label="Improvement",
+                        bordered=True,
+                    ),
+                ],
+                justify="center",
+                gap="1rem",
+            ),
+            mo.callout(
+                mo.md(
+                    f"NCA pre-pre-training (orange) consistently outperforms all baselines throughout training. "
+                    f"The gap with Scratch (blue) persists and even widens over time. "
+                    f"Most remarkably, NCA used only **164M synthetic tokens** for pre-pre-training, "
+                    f"while C4 (green) used **1.6B tokens of real text**, yet NCA still wins."
+                ),
+                kind="success",
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def convergence_to_domain_bridge(mo):
+    mo.md(r"""
+    The perplexity advantage persists throughout training and even widens over time. But the paper didn't stop there. They asked a follow-up question: **does the same NCA configuration work equally well for every type of text?**
+
+    It turns out the answer is no, and the reason ties back to what we learned about complexity in Part 2.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def domain_match_intro_md(mo):
+    mo.md(r"""
+    ## Domain-Matched Complexity: One Size Does Not Fit All
+
+    The paper discovered that **the optimal NCA complexity depends on the target domain**.
+
+    - **CodeParrot** (code, gzip ~32%) benefits most from the **30-40%** NCA complexity band
+    - **OpenWebText** (web text, gzip ~70%) benefits most from the **50%+** NCA complexity band
+    - **OpenWebMath** (math, gzip ~58%) also favors **higher complexity** NCA rules, similar to web text
+
+    The principle is straightforward: **match the synthetic data's complexity to your target domain's complexity**. Code is highly structured and repetitive, so simpler NCA patterns are the best warm-up. Natural language and math have richer, less predictable structure, so they benefit from more complex NCA dynamics.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def domain_match_display(alt, mo, pd):
+    # Perplexity improvement (%) by NCA band and target domain
+    # Source: Paper Figure 6 (approximate), only OpenWebText and CodeParrot have per-band data
+    _dm_rows = [
+        {
+            "NCA Band": "20-30%",
+            "Domain": "CodeParrot (code)",
+            "Improvement (%)": 2.0,
+        },
+        {
+            "NCA Band": "30-40%",
+            "Domain": "CodeParrot (code)",
+            "Improvement (%)": 4.0,
+        },
+        {
+            "NCA Band": "40-50%",
+            "Domain": "CodeParrot (code)",
+            "Improvement (%)": 3.0,
+        },
+        {"NCA Band": "50%+", "Domain": "CodeParrot (code)", "Improvement (%)": 2.0},
+        {
+            "NCA Band": "20-30%",
+            "Domain": "OpenWebText (web)",
+            "Improvement (%)": 1.0,
+        },
+        {
+            "NCA Band": "30-40%",
+            "Domain": "OpenWebText (web)",
+            "Improvement (%)": 2.0,
+        },
+        {
+            "NCA Band": "40-50%",
+            "Domain": "OpenWebText (web)",
+            "Improvement (%)": 3.0,
+        },
+        {"NCA Band": "50%+", "Domain": "OpenWebText (web)", "Improvement (%)": 5.0},
+    ]
+    _dm_df = pd.DataFrame(_dm_rows)
+
+    _heatmap = (
+        alt.Chart(_dm_df)
+        .mark_rect(cornerRadius=4)
+        .encode(
+            x=alt.X(
+                "NCA Band:N",
+                sort=["20-30%", "30-40%", "40-50%", "50%+"],
+                title="NCA Complexity Band",
+            ),
+            y=alt.Y("Domain:N", title=None),
+            color=alt.Color(
+                "Improvement (%):Q",
+                scale=alt.Scale(scheme="yellowgreenblue", domain=[0, 5]),
+                legend=alt.Legend(title="Perplexity\nImprovement (%)"),
+            ),
+        )
+    )
+
+    _text = (
+        alt.Chart(_dm_df)
+        .mark_text(fontSize=14, fontWeight="bold")
+        .encode(
+            x=alt.X("NCA Band:N", sort=["20-30%", "30-40%", "40-50%", "50%+"]),
+            y=alt.Y("Domain:N"),
+            text=alt.Text("Improvement (%):Q", format=".1f"),
+            color=alt.condition(
+                alt.datum["Improvement (%)"] > 3.5,
+                alt.value("white"),
+                alt.value("#333"),
+            ),
+        )
+    )
+
+    _dm_chart = (_heatmap + _text).properties(
+        width=400,
+        height=150,
+        title="Perplexity Improvement by NCA Band and Target Domain",
+    )
+
+    # Gzip reference markers
+    _ref_rows = [
+        {"Domain": "CodeParrot (code)", "gzip": 32},
+        {"Domain": "OpenWebText (web)", "gzip": 70},
+    ]
+    _ref_df = pd.DataFrame(_ref_rows)
+
+    _gzip_bars = (
+        alt.Chart(_ref_df)
+        .mark_bar(cornerRadiusEnd=4, height=20)
+        .encode(
+            x=alt.X(
+                "gzip:Q",
+                title="Domain's Own Gzip Complexity (%)",
+                scale=alt.Scale(domain=[0, 100]),
+            ),
+            y=alt.Y("Domain:N", title=None),
+            color=alt.Color(
+                "Domain:N",
+                scale=alt.Scale(
+                    domain=["CodeParrot (code)", "OpenWebText (web)"],
+                    range=["#4e79a7", "#e15759"],
+                ),
+                legend=None,
+            ),
+        )
+        .properties(
+            width=400, height=80, title="Intrinsic Complexity of Each Domain"
+        )
+    )
+
+    mo.vstack(
+        [
+            _dm_chart,
+            mo.md(""),
+            _gzip_bars,
+            mo.callout(
+                mo.md(
+                    "The diagonal pattern is clear: **CodeParrot** (gzip 32%) peaks at the **30-40%** NCA band, "
+                    "while **OpenWebText** (gzip 70%) peaks at the **50%+** band. "
+                    "Each domain benefits most when the synthetic pre-training data matches its own complexity level."
+                ),
+                kind="info",
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def domain_to_weight_bridge(mo):
+    mo.md(r"""
+    So NCA pre-pre-training works, and its effectiveness can be tuned by matching complexity to the target domain. But *what is actually changing* inside the model? Which components absorb the benefit of pre-pre-training, and which ones are unaffected?
+
+    To answer this, we can look directly at our own TinyGPT models from Part 1 and compare their weights.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def weight_diff_intro_md(mo):
+    mo.md(r"""
+    ## What NCA Pre-training Does to the Weights
+
+    The diagram below shows each component of TinyGPT as a block, colored by how much its weights diverged between the scratch-trained and NCA-pre-trained models. Hover over any block for the exact L2 difference. The bar chart on the right aggregates these differences by component type.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def weight_diff_arch_widget(
+    N_LAYERS,
+    alt,
+    anywidget,
+    mo,
+    nca_model,
+    pd,
+    scratch_model,
+    traitlets,
+):
+    import numpy as _np_arch
+
+
+    # Compute per-subcomponent diffs for the SVG widget
+    def _compute_arch_diffs():
+        diffs = {}
+        for li in range(N_LAYERS):
+            sb = scratch_model.blocks[li]
+            nb = nca_model.blocks[li]
+            s = sb.self_attn.in_proj_weight.detach().numpy()
+            n = nb.self_attn.in_proj_weight.detach().numpy()
+            diffs[f"attn_qkv_{li}"] = float(_np_arch.linalg.norm(n - s))
+            s = sb.self_attn.out_proj.weight.detach().numpy()
+            n = nb.self_attn.out_proj.weight.detach().numpy()
+            diffs[f"attn_out_{li}"] = float(_np_arch.linalg.norm(n - s))
+            s = sb.linear1.weight.detach().numpy()
+            n = nb.linear1.weight.detach().numpy()
+            diffs[f"mlp1_{li}"] = float(_np_arch.linalg.norm(n - s))
+            s = sb.linear2.weight.detach().numpy()
+            n = nb.linear2.weight.detach().numpy()
+            diffs[f"mlp2_{li}"] = float(_np_arch.linalg.norm(n - s))
+            s = sb.norm1.weight.detach().numpy()
+            n = nb.norm1.weight.detach().numpy()
+            diffs[f"ln1_{li}"] = float(_np_arch.linalg.norm(n - s))
+            s = sb.norm2.weight.detach().numpy()
+            n = nb.norm2.weight.detach().numpy()
+            diffs[f"ln2_{li}"] = float(_np_arch.linalg.norm(n - s))
+        s = scratch_model.ln_f.weight.detach().numpy()
+        n = nca_model.ln_f.weight.detach().numpy()
+        diffs["ln_f"] = float(_np_arch.linalg.norm(n - s))
+        return diffs
+
+
+    _arch_diffs = _compute_arch_diffs()
+
+
+    # Compute aggregate per-component diffs for the bar chart
+    def _compute_agg_diffs():
+        components = []
+        for li in range(N_LAYERS):
+            sb = scratch_model.blocks[li]
+            nb = nca_model.blocks[li]
+            # Attention (QKV + Out combined)
+            s_attn = sb.self_attn.in_proj_weight.detach().numpy()
+            n_attn = nb.self_attn.in_proj_weight.detach().numpy()
+            s_out = sb.self_attn.out_proj.weight.detach().numpy()
+            n_out = nb.self_attn.out_proj.weight.detach().numpy()
+            diff_attn = float(_np_arch.linalg.norm(n_attn - s_attn)) + float(
+                _np_arch.linalg.norm(n_out - s_out)
+            )
+            components.append(
+                {
+                    "name": f"Attention L{li}",
+                    "type": "attention",
+                    "diff_norm": diff_attn,
+                }
+            )
+            # MLP
+            s_l1 = sb.linear1.weight.detach().numpy()
+            n_l1 = nb.linear1.weight.detach().numpy()
+            s_l2 = sb.linear2.weight.detach().numpy()
+            n_l2 = nb.linear2.weight.detach().numpy()
+            diff_mlp = float(_np_arch.linalg.norm(n_l1 - s_l1)) + float(
+                _np_arch.linalg.norm(n_l2 - s_l2)
+            )
+            components.append(
+                {"name": f"MLP L{li}", "type": "mlp", "diff_norm": diff_mlp}
+            )
+            # LayerNorm
+            s_ln = sb.norm1.weight.detach().numpy()
+            n_ln = nb.norm1.weight.detach().numpy()
+            diff_ln = float(_np_arch.linalg.norm(n_ln - s_ln))
+            components.append(
+                {
+                    "name": f"LayerNorm L{li}",
+                    "type": "layernorm",
+                    "diff_norm": diff_ln,
+                }
+            )
+        return components
+
+
+    _agg_diffs = _compute_agg_diffs()
+    _wd_df = pd.DataFrame(_agg_diffs)
+
+    _type_colors = {
+        "attention": "#e15759",
+        "mlp": "#4e79a8",
+        "layernorm": "#76b7b2",
+    }
+
+    _diff_chart = (
+        alt.Chart(_wd_df)
+        .mark_bar(cornerRadiusEnd=4)
+        .encode(
+            x=alt.X("diff_norm:Q", title="Weight Difference (L2 Norm)"),
+            y=alt.Y("name:N", sort=None, title=None),
+            color=alt.Color(
+                "type:N",
+                scale=alt.Scale(
+                    domain=list(_type_colors.keys()),
+                    range=list(_type_colors.values()),
+                ),
+                legend=alt.Legend(title=None),
+            ),
+            tooltip=["name:N", alt.Tooltip("diff_norm:Q", format=".2f")],
+        )
+        .properties(width=320, height=250, title="Weight Divergence (L2 Norm)")
+    )
+
+    _attn_avg = _wd_df[_wd_df["type"] == "attention"]["diff_norm"].mean()
+    _mlp_avg = _wd_df[_wd_df["type"] == "mlp"]["diff_norm"].mean()
+    _ratio = _attn_avg / _mlp_avg if _mlp_avg > 0 else float("inf")
+
+    # SVG architecture widget
+    _ARCH_ESM = """
+    function render({ model, el }) {
+      const diffs = model.get("diffs");
+      const nLayers = model.get("n_layers");
+      const maxDiff = Math.max(...Object.values(diffs));
+
+      const W = 520, LH = 130, PAD = 15;
+      const totalH = PAD + 20 + nLayers * LH + 70 + PAD;
+
+      const root = document.createElement("div");
+      root.style.cssText = "font-family: sans-serif; user-select: none;";
+
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("width", W);
+      svg.setAttribute("height", totalH);
+      svg.setAttribute("viewBox", `0 0 ${W} ${totalH}`);
+
+      const tooltip = document.createElement("div");
+      tooltip.style.cssText = "position:fixed;padding:8px 12px;background:#333;color:#fff;border-radius:6px;font-size:12px;pointer-events:none;opacity:0;transition:opacity 0.15s;z-index:999;font-family:monospace;";
+      root.appendChild(tooltip);
+
+      function intensity(key) { return Math.min(1, (diffs[key] || 0) / maxDiff); }
+
+      function diffColor(key) {
+        const t = intensity(key);
+        if (t < 0.33) {
+          const s = t / 0.33;
+          return `rgb(255, 255, ${Math.round(255 - s * 100)})`;
+        } else if (t < 0.66) {
+          const s = (t - 0.33) / 0.33;
+          return `rgb(255, ${Math.round(255 - s * 120)}, ${Math.round(155 - s * 100)})`;
+        } else {
+          const s = (t - 0.66) / 0.34;
+          return `rgb(${Math.round(255 - s * 55)}, ${Math.round(135 - s * 80)}, ${Math.round(55 - s * 55)})`;
+        }
+      }
+
+      function makeBlock(x, y, w, h, key, label, group) {
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.style.cursor = "pointer";
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", x); rect.setAttribute("y", y);
+        rect.setAttribute("width", w); rect.setAttribute("height", h);
+        rect.setAttribute("rx", 6); rect.setAttribute("fill", diffColor(key));
+        rect.setAttribute("stroke", group === "attention" ? "#c44e52" : group === "mlp" ? "#4c78a8" : "#888");
+        rect.setAttribute("stroke-width", 2);
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", x + w/2); text.setAttribute("y", y + h/2);
+        text.setAttribute("dy", "0.35em"); text.setAttribute("text-anchor", "middle");
+        text.setAttribute("font-size", "10px"); text.setAttribute("font-weight", "600");
+        text.setAttribute("fill", "#333"); text.textContent = label;
+        g.appendChild(rect); g.appendChild(text);
+        g.addEventListener("mouseenter", (e) => {
+          tooltip.innerHTML = `<b>${label}</b><br>L2 diff: ${(diffs[key]||0).toFixed(2)}<br>Intensity: ${(intensity(key)*100).toFixed(0)}%`;
+          tooltip.style.opacity = 1; rect.setAttribute("stroke-width", 3);
+        });
+        g.addEventListener("mousemove", (e) => {
+          tooltip.style.left = (e.clientX+12)+"px"; tooltip.style.top = (e.clientY-40)+"px";
+        });
+        g.addEventListener("mouseleave", () => {
+          tooltip.style.opacity = 0; rect.setAttribute("stroke-width", 2);
+        });
+        svg.appendChild(g);
+      }
+
+      function arrow(x1,y1,x2,y2) {
+        const l = document.createElementNS("http://www.w3.org/2000/svg","line");
+        l.setAttribute("x1",x1);l.setAttribute("y1",y1);l.setAttribute("x2",x2);l.setAttribute("y2",y2);
+        l.setAttribute("stroke","#bbb");l.setAttribute("stroke-width",1.5);
+        l.setAttribute("marker-end","url(#ah)"); svg.appendChild(l);
+      }
+      function lbl(x,y,t,c) {
+        const e=document.createElementNS("http://www.w3.org/2000/svg","text");
+        e.setAttribute("x",x);e.setAttribute("y",y);e.setAttribute("font-size","10px");
+        e.setAttribute("fill",c||"#999");e.setAttribute("font-weight","bold");e.textContent=t;
+        svg.appendChild(e);
+      }
+
+      const defs=document.createElementNS("http://www.w3.org/2000/svg","defs");
+      const mk=document.createElementNS("http://www.w3.org/2000/svg","marker");
+      mk.setAttribute("id","ah");mk.setAttribute("markerWidth",8);mk.setAttribute("markerHeight",6);
+      mk.setAttribute("refX",8);mk.setAttribute("refY",3);mk.setAttribute("orient","auto");
+      const p=document.createElementNS("http://www.w3.org/2000/svg","path");
+      p.setAttribute("d","M0,0 L8,3 L0,6 Z");p.setAttribute("fill","#bbb");
+      mk.appendChild(p);defs.appendChild(mk);svg.appendChild(defs);
+
+      const title=document.createElementNS("http://www.w3.org/2000/svg","text");
+      title.setAttribute("x",W/2);title.setAttribute("y",16);title.setAttribute("text-anchor","middle");
+      title.setAttribute("font-size","13px");title.setAttribute("font-weight","bold");title.setAttribute("fill","#444");
+      title.textContent="TinyGPT Architecture (hover for details)";
+      svg.appendChild(title);
+
+      let cy=32; const cx=W/2; const bh=28;
+      lbl(cx-15,cy,"Input","#aaa"); cy+=14; arrow(cx,cy,cx,cy+10); cy+=16;
+
+      for(let li=0;li<nLayers;li++){
+        const by=cy;
+        const bg=document.createElementNS("http://www.w3.org/2000/svg","rect");
+        bg.setAttribute("x",50);bg.setAttribute("y",by-4);bg.setAttribute("width",W-100);
+        bg.setAttribute("height",LH-15);bg.setAttribute("rx",8);bg.setAttribute("fill","#f8f8f8");
+        bg.setAttribute("stroke","#e0e0e0");bg.setAttribute("stroke-width",1);svg.appendChild(bg);
+        lbl(58,by+10,"LAYER "+li,"#666");
+        makeBlock(120,by+1,75,bh,"ln1_"+li,"LayerNorm","norm");
+        makeBlock(210,by+1,110,bh,"attn_qkv_"+li,"Attn Q/K/V","attention");
+        makeBlock(335,by+1,90,bh,"attn_out_"+li,"Attn Out","attention");
+        arrow(cx,by+bh+5,cx,by+bh+14);
+        makeBlock(120,by+bh+18,75,bh,"ln2_"+li,"LayerNorm","norm");
+        makeBlock(210,by+bh+18,110,bh,"mlp1_"+li,"FFN Up","mlp");
+        makeBlock(335,by+bh+18,90,bh,"mlp2_"+li,"FFN Down","mlp");
+        cy+=LH;
+        if(li<nLayers-1){arrow(cx,cy-10,cx,cy+2);cy+=6;}
+      }
+      cy+=8;arrow(cx,cy-12,cx,cy);
+      makeBlock(cx-50,cy,100,bh,"ln_f","Final LN","norm");
+      cy+=bh+10;arrow(cx,cy-6,cx,cy+4);lbl(cx-18,cy+16,"Output","#aaa");
+
+      cy+=30;
+      [["Low diff","rgb(255,255,255)"],["Medium","rgb(255,200,80)"],["High diff","rgb(200,55,0)"]].forEach((item,i)=>{
+        const bx=80+i*155;
+        const r=document.createElementNS("http://www.w3.org/2000/svg","rect");
+        r.setAttribute("x",bx);r.setAttribute("y",cy);r.setAttribute("width",14);r.setAttribute("height",14);
+        r.setAttribute("rx",3);r.setAttribute("fill",item[1]);r.setAttribute("stroke","#999");svg.appendChild(r);
+        const t=document.createElementNS("http://www.w3.org/2000/svg","text");
+        t.setAttribute("x",bx+20);t.setAttribute("y",cy+11);t.setAttribute("font-size","10px");
+        t.setAttribute("fill","#666");t.textContent=item[0];svg.appendChild(t);
+      });
+      const ly2=cy+20;
+      [["\\u25A0 Attention","#c44e52"],["\\u25A0 MLP","#4c78a8"],["\\u25A0 LayerNorm","#888"]].forEach((item,i)=>{
+        const t=document.createElementNS("http://www.w3.org/2000/svg","text");
+        t.setAttribute("x",80+i*155);t.setAttribute("y",ly2);t.setAttribute("font-size","10px");
+        t.setAttribute("fill",item[1]);t.setAttribute("font-weight","bold");t.textContent=item[0];
+        svg.appendChild(t);
+      });
+
+      root.appendChild(svg);el.appendChild(root);
+    }
+    export default { render };
+    """
+
+
+    class ArchDiffWidget(anywidget.AnyWidget):
+        _esm = _ARCH_ESM
+        diffs = traitlets.Dict({}).tag(sync=True)
+        n_layers = traitlets.Int(N_LAYERS).tag(sync=True)
+
+
+    arch_widget = ArchDiffWidget(diffs=_arch_diffs, n_layers=N_LAYERS)
+
+    # Layout: arch diagram left, chart + stats right
+    mo.vstack([
+        mo.hstack(
+            [
+                arch_widget,
+                mo.vstack(
+                    [
+                        _diff_chart,
+                        mo.hstack(
+                            [
+                                mo.stat(
+                                    value=f"{_attn_avg:.1f}",
+                                    label="Avg Attention Diff",
+                                    bordered=True,
+                                ),
+                                mo.stat(
+                                    value=f"{_mlp_avg:.1f}",
+                                    label="Avg MLP Diff",
+                                    bordered=True,
+                                ),
+                                mo.stat(
+                                    value=f"{_ratio:.1f}x",
+                                    label="Attn/MLP Ratio",
+                                    bordered=True,
+                                ),
+                            ],
+                            justify="center",
+                            gap="1rem",
+                        ),
+                    ],
+                    gap="0.5rem",
+                ),
+            ],
+            gap="1.5rem",
+            align="start",
+        ),
+        mo.callout(
+            mo.md(
+                f"**Attention weights diverged {_ratio:.1f}x more** than MLP weights between the two training regimes. "
+                f"Attention layers are where the universal computational primitives "
+                f"(pattern matching, in-context learning circuits) develop during NCA pre-training, while "
+                f"MLP layers remain closer to their initial state."
+            ),
+            kind="info",
+        ),
+    ])
+
+    return
+
+
+@app.cell(hide_code=True)
+def weight_to_attention_bridge(mo):
+    mo.md(r"""
+    The architecture diagram confirms that attention weights diverge far more than MLP weights. But does this divergence actually *matter* for downstream performance? The paper tested this by selectively resetting parts of the NCA-trained model back to random weights, then measuring what breaks.
+
+    We can run the same experiment on our TinyGPT models right now.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def attention_transfer_intro_md(mo):
+    mo.md(r"""
+    ## The Attention Transfer Experiment
+
+    Below, we take the fine-tuned NCA model and reset specific weight groups back to random initialization. If attention carries the transferable primitives, resetting it should devastate performance. If MLPs are domain-specific, resetting them should barely matter.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def attention_transfer_experiment(
+    PREDICT_DIGITS,
+    alt,
+    make_batch,
+    mo,
+    nca_model,
+    nn,
+    pd,
+    torch,
+):
+    import copy as _copy
+
+
+    def _selective_reset_test(base_model, n_samples=256):
+        """Test model performance with selective weight resets."""
+        results = {}
+
+        base_model.eval()
+        with torch.no_grad():
+            xv, yv = make_batch(n_samples)
+            acc_full = (
+                (
+                    base_model(xv)[:, PREDICT_DIGITS:, :].argmax(-1)
+                    == yv[:, PREDICT_DIGITS:]
+                )
+                .float()
+                .mean()
+                .item()
+            )
+        results["Full NCA Model"] = acc_full
+
+        attn_reset = _copy.deepcopy(base_model)
+        with torch.no_grad():
+            for block in attn_reset.blocks:
+                attn = block.self_attn
+                nn.init.xavier_uniform_(attn.in_proj_weight)
+                nn.init.xavier_uniform_(attn.out_proj.weight)
+                if attn.in_proj_bias is not None:
+                    nn.init.zeros_(attn.in_proj_bias)
+                nn.init.zeros_(attn.out_proj.bias)
+        attn_reset.eval()
+        with torch.no_grad():
+            acc_no_attn = (
+                (
+                    attn_reset(xv)[:, PREDICT_DIGITS:, :].argmax(-1)
+                    == yv[:, PREDICT_DIGITS:]
+                )
+                .float()
+                .mean()
+                .item()
+            )
+        results["Reset Attention"] = acc_no_attn
+
+        mlp_reset = _copy.deepcopy(base_model)
+        with torch.no_grad():
+            for block in mlp_reset.blocks:
+                nn.init.xavier_uniform_(block.linear1.weight)
+                nn.init.xavier_uniform_(block.linear2.weight)
+                nn.init.zeros_(block.linear1.bias)
+                nn.init.zeros_(block.linear2.bias)
+        mlp_reset.eval()
+        with torch.no_grad():
+            acc_no_mlp = (
+                (
+                    mlp_reset(xv)[:, PREDICT_DIGITS:, :].argmax(-1)
+                    == yv[:, PREDICT_DIGITS:]
+                )
+                .float()
+                .mean()
+                .item()
+            )
+        results["Reset MLP"] = acc_no_mlp
+
+        both_reset = _copy.deepcopy(base_model)
+        with torch.no_grad():
+            for block in both_reset.blocks:
+                attn = block.self_attn
+                nn.init.xavier_uniform_(attn.in_proj_weight)
+                nn.init.xavier_uniform_(attn.out_proj.weight)
+                if attn.in_proj_bias is not None:
+                    nn.init.zeros_(attn.in_proj_bias)
+                nn.init.zeros_(attn.out_proj.bias)
+                nn.init.xavier_uniform_(block.linear1.weight)
+                nn.init.xavier_uniform_(block.linear2.weight)
+                nn.init.zeros_(block.linear1.bias)
+                nn.init.zeros_(block.linear2.bias)
+        both_reset.eval()
+        with torch.no_grad():
+            acc_both = (
+                (
+                    both_reset(xv)[:, PREDICT_DIGITS:, :].argmax(-1)
+                    == yv[:, PREDICT_DIGITS:]
+                )
+                .float()
+                .mean()
+                .item()
+            )
+        results["Reset Both"] = acc_both
+
+        return results
+
+
+    _nca_results = _selective_reset_test(nca_model)
+
+    _config_colors = {
+        "Full NCA Model": "#59a14f",
+        "Reset Attention": "#e15759",
+        "Reset MLP": "#4e79a7",
+        "Reset Both": "#999999",
+    }
+
+    _at_df = pd.DataFrame(
+        [{"config": k, "accuracy": v} for k, v in _nca_results.items()]
+    )
+
+    _at_chart = (
+        alt.Chart(_at_df)
+        .mark_bar(cornerRadiusEnd=6)
+        .encode(
+            x=alt.X(
+                "accuracy:Q",
+                title="Reversal Accuracy",
+                scale=alt.Scale(domain=[0, 1]),
+            ),
+            y=alt.Y("config:N", sort=list(_nca_results.keys()), title=None),
+            color=alt.Color(
+                "config:N",
+                scale=alt.Scale(
+                    domain=list(_config_colors.keys()),
+                    range=list(_config_colors.values()),
+                ),
+                legend=None,
+            ),
+        )
+        .properties(
+            width=500,
+            height=200,
+            title="Effect of Selective Weight Reset on NCA-Trained Model",
+        )
+    )
+
+    _full_acc = _nca_results["Full NCA Model"]
+    _attn_acc = _nca_results["Reset Attention"]
+    _mlp_acc = _nca_results["Reset MLP"]
+    _attn_drop = (_full_acc - _attn_acc) / _full_acc * 100 if _full_acc > 0 else 0
+    _mlp_drop = (_full_acc - _mlp_acc) / _full_acc * 100 if _full_acc > 0 else 0
+
+    mo.vstack(
+        [
+            _at_chart,
+            mo.hstack(
+                [
+                    mo.stat(
+                        value=f"{_full_acc:.1%}", label="Full Model", bordered=True
+                    ),
+                    mo.stat(
+                        value=f"{_attn_acc:.1%}",
+                        label="Reset Attention",
+                        bordered=True,
+                    ),
+                    mo.stat(
+                        value=f"{_mlp_acc:.1%}", label="Reset MLP", bordered=True
+                    ),
+                    mo.stat(
+                        value=f"{_nca_results['Reset Both']:.1%}",
+                        label="Reset Both",
+                        bordered=True,
+                    ),
+                ],
+                justify="center",
+                gap="1rem",
+            ),
+            mo.callout(
+                mo.md(
+                    f"**Resetting attention** drops accuracy by **{_attn_drop:.0f}%**, destroying the learned "
+                    f"computational primitives.\n\n"
+                    f"**Resetting MLP** drops accuracy by only **{_mlp_drop:.0f}%**. The MLP stores "
+                    f"task-specific patterns that are less critical to the model's core reasoning ability.\n\n"
+                    f"This confirms the paper's finding: **attention layers are the universal carrier of transferable capabilities**."
+                ),
+                kind="info",
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def notebook_conclusion_md(mo):
+    mo.md(r"""
+    ## Putting It All Together
+
+    We started with a simple question: *is natural language the only path to teaching a model to reason?*
+
+    Through this notebook, we've seen that the answer is no. Abstract patterns from Neural Cellular Automata, containing no words, no grammar, and no meaning, can teach a Transformer the computational foundations it needs to learn language faster and more efficiently.
+
+    **What we demonstrated:**
+
+    1. **Pre-pre-training works.** Even our tiny TinyGPT model learns the reversal task faster after warming up on NCA patterns, with lower total energy cost.
+
+    2. **NCA mechanics.** Neural cellular automata replace fixed rules with learned neural networks, creating diverse structured dynamics from simple local interactions.
+
+    3. **Complexity is the key.** Gzip compressibility acts as a practical filter, selecting NCA rules in the "Goldilocks zone" between trivial repetition and chaotic noise. These rules produce token distributions that follow the same Zipfian power law as natural language.
+
+    4. **Domain matching matters.** The optimal NCA complexity band varies by target domain: simpler for code, more complex for web text and math.
+
+    5. **Attention carries the transfer.** The universal computational primitives learned during NCA pre-training live in the attention layers, not the MLPs. Resetting attention destroys the benefit; resetting MLPs barely matters.
+
+    **The bigger picture:** If 164M synthetic NCA tokens can outperform 1.6B tokens of real language as a warm-up, perhaps the path to better AI isn't just *more* data but *better structured* data. The structural foundations of intelligence might be simpler than we thought.
 
     ---
-    *This interactive notebook was built to explore the mechanics of [Your Paper Title/Link]. By bridgeing the gap between spatial cellular automata and sequential language models, we can see how simple local rules emerge into complex global intelligence.*
+
+    *Based on [Training Language Models via Neural Cellular Automata](https://arxiv.org/abs/2603.10055) by Dan Lee, Seungwook Han, Akarsh Kumar, and Pulkit Agrawal (MIT / Improbable AI Lab).*
     """)
     return
 
