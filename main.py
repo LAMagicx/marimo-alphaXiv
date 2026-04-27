@@ -4050,7 +4050,7 @@ def notebook_conclusion_md(mo):
 
     ---
 
-    *Based on [Training Language Models via Neural Cellular Automata](https://arxiv.org/abs/2603.10055) by Dan Lee, Seungwook Han, Akarsh Kumar, and Pulkit Agrawal (MIT / Improbable AI Lab).*
+    *Based on [Training Language Models via Neural Cellular Automata](https://www.alphaxiv.org/abs/2603.10055) by Dan Lee, Seungwook Han, Akarsh Kumar, and Pulkit Agrawal (MIT / Improbable AI Lab).*
     """)
     return
 
