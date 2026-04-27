@@ -16,6 +16,7 @@ making it learn language tasks faster and more efficiently than
 starting from scratch or even pre-training on real text.
 
 Created by Magic (@LAMagicx) for the alphaXiv x marimo competition.
+https://github.com/LAMagicx/marimo-alphaXiv/tree/main
 """
 
 import marimo
